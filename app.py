@@ -76,7 +76,9 @@ li[role="option"] {{ color: {text_main} !important; background-color: {bg_panel}
 .kpi-sub {{ color: {text_muted}; font-size: 12.5px; margin-top: 4px; }}
 .insight-box {{ background: {hover_bg}; border-left: 4px solid {ACCENT}; border-radius: 8px; padding: 14px 18px; margin: 10px 0 18px 0; }}
 .insight-box p {{ color: {text_main} !important; font-size: 14px; margin: 0; line-height: 1.65; }}
-.section-title {{ font-size: 20px; font-weight: 700; color: {text_main}; margin: 28px 0 4px 0; padding-bottom: 8px; border-bottom: 2px solid {border_col}; }}
+.section-title {{ font-size: 17px; font-weight: 700; color: {text_main}; margin: 14px 0 2px 0; padding-bottom: 5px; border-bottom: 2px solid {border_col}; }}
+div[data-testid="stVerticalBlock"] > div:has(> div.stMarkdown) {{ gap: 0.3rem; }}
+.element-container {{ margin-bottom: 0 !important; }}
 .small-note {{ color: {text_muted}; font-size: 12px; font-style: italic; }}
 </style>
 """, unsafe_allow_html=True)
@@ -96,17 +98,19 @@ def kpi(label, value, sub=""):
                 unsafe_allow_html=True)
 
 
-def style_fig(fig, title=None, h=420, legend_below=False):
-    fig.update_layout(
+def style_fig(fig, title=None, h=380, legend_below=False):
+    layout_kwargs = dict(
         template=chart_template, height=h,
         paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
         font=dict(family="Inter", color=text_main, size=12.5),
-        title=dict(text=title, font=dict(size=15, weight=700)) if title else None,
-        margin=dict(l=10, r=10, t=55 if title else 20, b=10),
-        legend=dict(orientation="h", yanchor="bottom", y=-0.25, xanchor="center", x=0.5) if legend_below else {},
+        margin=dict(l=20, r=40, t=45 if title else 15, b=20),
+        legend=dict(orientation="h", yanchor="bottom", y=-0.3, xanchor="center", x=0.5) if legend_below else {},
     )
-    fig.update_xaxes(gridcolor=border_col, zerolinecolor=border_col)
-    fig.update_yaxes(gridcolor=border_col, zerolinecolor=border_col)
+    if title:
+        layout_kwargs['title'] = dict(text=title, font=dict(size=14.5))
+    fig.update_layout(**layout_kwargs)
+    fig.update_xaxes(gridcolor=border_col, zerolinecolor=border_col, automargin=True)
+    fig.update_yaxes(gridcolor=border_col, zerolinecolor=border_col, automargin=True)
     return fig
 
 
@@ -216,10 +220,11 @@ if df is None:
 
 missing = [k for k, v in cmap.items() if v is None]
 with st.sidebar:
-    st.markdown("---")
-    with st.expander(f"Debug: kolom terdeteksi ({len(cmap)-len(missing)}/{len(cmap)})"):
-        for k, v in cmap.items():
-            st.caption(f"{'✅' if v else '❌'} `{k}`" + (f" → {v[:45]}..." if v else " → TIDAK DITEMUKAN"))
+    show_debug = st.checkbox("Tampilkan info debug kolom", value=False)
+    if show_debug:
+        with st.expander(f"Kolom terdeteksi ({len(cmap)-len(missing)}/{len(cmap)})", expanded=True):
+            for k, v in cmap.items():
+                st.caption(f"{'✅' if v else '❌'} `{k}`" + (f" → {v[:45]}..." if v else " → TIDAK DITEMUKAN"))
 
 LABEL_ALASAN_CEPAT = {
     'Fleksibel dan Mudah Belajar (Dapat menyesuaikan perilaku dengan situasi dan cepat mempelajari aturan, budaya dan kebiasaan baru)': 'Fleksibel & mudah belajar',
@@ -240,6 +245,8 @@ LABEL_KOMUNITAS = {
 }
 LABEL_PROFIL = {
     'The Balanced Leader: Mengintegrasikan Akademik dan Organisasi (Aktif berorganisasi dan tetap menjaga prestasi akademik dengan baik)': 'The Balanced Leader',
+    'The Active Organizer: Terbukti Berogranisasi dan Berkembang (Aktif dalam organisasi kemahasiswaan (BEM, HIMPRO, UKM) dan Berbagai Kepanitian)': 'The Active Organizer',
+    'The Active Organizer: Terbukti Berogranisasi dan Berkembang (Aktif dalam organisasi kemahasiswaan (BEM, HIMPRO, UKM) dan Berbagai Kepanitian': 'The Active Organizer',
     'The Focused Enthusiast: Meraih Prestasi di Dua Dunia (Fokus pada akademik, namun tetap menekuni hobi/minat secara serius hingga level kompetitif)': 'The Focused Enthusiast',
     'The Academic Specialist: Fokus Mendalam pada Prestasi Akademik (Menjadikan Akademik sebagai prioritas utama dan aren pengembangan diri yang paling bermakna)': 'The Academic Specialist',
     'Belum tahu yang mana': 'Belum tahu profilnya',
@@ -305,7 +312,7 @@ with t1:
         pct_tahu = (df_f['pengetahuan_fasilitasi'] == 'Ya').mean() * 100 if 'pengetahuan_fasilitasi' in df_f else None
         kpi("Tahu Fasilitasi Kompetitif", f"{pct_tahu:.0f}%" if pct_tahu is not None else "–", "minimal 1 program")
 
-    st.markdown("<br>", unsafe_allow_html=True)
+    
     sh("Profil Mahasiswa Selama Perkuliahan")
     if 'profil_mhs' in df_f:
         pc = df_f['profil_mhs'].map(LABEL_PROFIL).fillna(df_f['profil_mhs']).value_counts().sort_values(ascending=True)
@@ -415,7 +422,7 @@ with t3:
                                   f'Cepat (n={n_ya})', f'Lambat (n={n_tidak})',
                                   LABEL_ALASAN_CEPAT, LABEL_ALASAN_LAMBAT)
         if fig:
-            st.plotly_chart(style_fig(fig, h=420, legend_below=True), use_container_width=True)
+            st.plotly_chart(style_fig(fig, h=360, legend_below=True), use_container_width=True)
             ib(f"<b>{n_ya}</b> mahasiswa ({n_ya/(n_ya+n_tidak)*100:.0f}%) cepat beradaptasi, "
                f"didorong utamanya oleh fleksibilitas dan kemudahan belajar. Yang lambat beradaptasi "
                f"({n_tidak} orang) paling sering terkendala rasa malu/canggung, bukan karena masalah teknis.")
@@ -443,7 +450,7 @@ with t3:
                                     f'Sendiri (n={n_s})', f'Tim (n={n_t})',
                                     label_sendiri, label_tim, color_ya='#378ADD', color_tidak='#7F77DD')
         if fig2:
-            st.plotly_chart(style_fig(fig2, h=420, legend_below=True), use_container_width=True)
+            st.plotly_chart(style_fig(fig2, h=360, legend_below=True), use_container_width=True)
             total = n_s + n_t
             ib(f"Preferensi nyaris seimbang: {n_s} orang ({n_s/total*100:.0f}%) sendiri vs {n_t} orang "
                f"({n_t/total*100:.0f}%) tim — bukan tren dominan ke satu arah. Ini penting untuk desain "
@@ -654,7 +661,7 @@ with t6:
         v = df_f['promosi_efektif'].dropna().astype(float).mean() if 'promosi_efektif' in df_f else None
         kpi("Keterjangkauan promosi", f"{v:.2f}/4.0" if v is not None else "–")
 
-    st.markdown("<br>", unsafe_allow_html=True)
+    
     f1, f2 = st.columns(2)
     with f1:
         sh("Sumber Informasi Fasilitasi")
