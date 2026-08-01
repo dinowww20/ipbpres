@@ -114,6 +114,41 @@ def style_fig(fig, title=None, h=380, legend_below=False):
     return fig
 
 
+def shorten(text, n=44):
+    """Fallback pemangkas label — dipakai kalau teks tidak ada di dictionary eksplisit."""
+    if not isinstance(text, str):
+        return text
+    text = text.strip()
+    return text if len(text) <= n else text[:n - 1].rstrip() + "…"
+
+
+def map_short(series, label_dict, fallback_n=44):
+    """Terapkan dictionary label singkat, dan pangkas otomatis sisanya yang tidak terdaftar."""
+    return series.map(lambda x: label_dict.get(x, shorten(x, fallback_n)) if pd.notna(x) else x)
+
+
+def explain_stat(p, v, context=""):
+    """Kotak penjelasan awam untuk uji chi-square & Cramér's V, dengan angka aktual."""
+    sig = p < 0.05
+    p_txt = (f"karena p-value = <b>{p:.3f}</b> (di bawah 0,05), secara statistik pola ini "
+             f"<b>cukup meyakinkan bukan kebetulan acak</b>") if sig else \
+            (f"karena p-value = <b>{p:.3f}</b> (di atas 0,05), pola beda-tidaknya "
+             f"<b>bisa jadi cuma kebetulan sebaran sampel</b>, bukan pola yang benar-benar nyata")
+    if v < 0.1:
+        v_txt = "praktis tidak ada keterkaitan"
+    elif v < 0.2:
+        v_txt = "keterkaitannya sangat lemah"
+    elif v < 0.3:
+        v_txt = "keterkaitannya lemah-sedang"
+    else:
+        v_txt = "keterkaitannya cukup kuat"
+    return (f"<b>Cara baca:</b> p-value mengukur seberapa besar kemungkinan pola ini muncul "
+            f"cuma karena kebetulan acak — semakin kecil p-value (di bawah 0,05), semakin "
+            f"meyakinkan bahwa pola itu nyata. Di sini {p_txt}. Cramér's V (0–1) mengukur "
+            f"<i>seberapa kuat</i> keterkaitannya — nilai <b>{v:.2f}</b> berarti {v_txt}. "
+            f"{context}")
+
+
 # ═══════════════════════════════════════════════════════
 # DATA LOADING
 # ═══════════════════════════════════════════════════════
@@ -259,6 +294,122 @@ BIDANG_MAP_RAW = {
 }
 COLORWAY = ['#0F6E56', '#378ADD', '#D85A30', '#EDA100', '#7F77DD', '#D4537E']
 
+LABEL_KENDALA = {
+    'Waktu proses lama': 'Waktu proses lama',
+    'Proses pengajuan atau pencairan fasilitas terlalu panjang dan rumit': 'Proses pengajuan panjang & rumit',
+    'Akses fasilitas memerlukan banyak persyaratan atau dokumen administratif': 'Banyak persyaratan/dokumen',
+    'Jadwal Operasional Terbatas': 'Jadwal operasional terbatas',
+    'Kurang Informasi Mekanisme Pengurusan': 'Kurang info mekanisme',
+    'Waktu pembinaan kurang panjang': 'Waktu pembinaan kurang panjang',
+    'Minimnya Digitalisasi Pengajuan masih banyak yang harus manual': 'Minim digitalisasi (manual)',
+    'Jadwal pendampingan berubah secara tiba-tiba': 'Jadwal berubah tiba-tiba',
+    'Petugas administrasi': 'Petugas kurang responsif',
+    'kurang responsif': 'Petugas kurang responsif',
+    'Pendampingan kurang profesional dan tidak berkesan': 'Pendampingan kurang profesional',
+}
+LABEL_EVALUASI = {
+    'Sosialisasi program ke mahasiswa': 'Sosialisasi program',
+    'Kecepatan proses verifikasi dan persetujuan': 'Kecepatan verifikasi',
+    'Respons terhadap pertanyaan/ keluhan': 'Respons pertanyaan/keluhan',
+    'Kualitas layanan petugas': 'Kualitas layanan petugas',
+}
+LABEL_SUMBER = {
+    'Postingan instagram @ipbprestasi': 'IG @ipbprestasi',
+    'Website IPB Prestasi': 'Website IPB Prestasi',
+    'Teman': 'Teman',
+    'Informasi yang disebarkan melalui WhatsApp di grup angkatan': 'WhatsApp grup angkatan',
+    'Postingan instagram BEM KM/BEM Fakultas/Himpunan': 'IG BEM/Himpunan',
+    'Website BEM KM/BEM Fakultas/Himpunan': 'Website BEM/Himpunan',
+    'Postingan instagram UKM': 'IG UKM',
+    'Website Fakultas/Program Studi': 'Website Fakultas/Prodi',
+    'Postingan tiktok': 'TikTok',
+    'Dosen': 'Dosen',
+    'Media cetak (poster) yang ditempel di setiap fakultas': 'Poster cetak',
+}
+LABEL_MEDIA = {
+    'Feed instagram': 'Feed Instagram', 'Instastory': 'Instastory',
+    'Channel di WA atau IG': 'Channel WA/IG', 'Melalui jaringan komunikasi di grup angkatan': 'Grup angkatan',
+    'Sosialisasi secara offline': 'Sosialisasi offline', 'Video pencerdasan': 'Video edukasi',
+    'Video tren': 'Video tren', 'TikTok': 'TikTok', 'Poster': 'Poster', 'Website': 'Website',
+}
+LABEL_MENTOR = {
+    'Kakak tingkat/Alumni yang pernah menjuarai di bidang lomba yang sama': 'Kating/alumni juara sebidang',
+    'Dosen yang ahli di bidang terkait': 'Dosen ahli terkait',
+    'Mentor profesional/eksternal dari luar kampus di bidang terkait': 'Mentor profesional eksternal',
+    'Seangkatan (teman sebaya) yang sudah lebih berpengalaman': 'Teman seangkatan berpengalaman',
+}
+LABEL_KRITERIA_MENTOR = {
+    'Rutin memberi arahan dan masukan': 'Rutin memberi arahan',
+    'Fleksibel dan terbuka diskusi': 'Fleksibel & terbuka diskusi',
+    'Memberi contoh ril terkait materi lomba': 'Kasih contoh riil materi lomba',
+    'Tegas, disiplin, tapi suportif': 'Tegas, disiplin, suportif',
+    'Memberi motivasi dan semangat': 'Memberi motivasi & semangat',
+    'Santai dan dapat menjadi teman mengobrol di luar konteks kegiatan/lomba': 'Santai, bisa jadi teman ngobrol',
+    'Sering berbagi pengalaman pribadi': 'Sering berbagi pengalaman',
+}
+LABEL_SKILL_BIDANG = {
+    'Kepercayaan diri saat berbicara di depan umum': 'Percaya diri bicara depan umum',
+    'Kemampuan menyusun argumen secara sistematis': 'Menyusun argumen sistematis',
+    'Kemampuan berpikir kritis, logis dan tepat': 'Berpikir kritis & logis',
+    'Kemampuan pemrograman (coding)': 'Kemampuan pemrograman (coding)',
+    'Kepercayaan diri untuk mulai mencoba membuat proyek': 'Percaya diri mulai proyek',
+    'Kemampuan kerja sama dalam tim teknis': 'Kerja sama tim teknis',
+    'Pemahaman dasar elektronika dan mekanik': 'Dasar elektronika & mekanik',
+    'Pemahaman terhadap isu sosial, budaya, dan kondisi lokal': 'Pemahaman isu sosial & lokal',
+    'Kemampuan pemecahan masalah terhadap isu sosial sekitar': 'Pemecahan masalah isu sosial',
+    'Kemampuan komunikasi langsung dengan masyarakat': 'Komunikasi langsung masyarakat',
+    'Konsistensi dalam kegiatan jangka panjang': 'Konsistensi jangka panjang',
+    'Kesiapan fisik dan mental untuk turun ke lapangan': 'Kesiapan fisik & mental',
+    'Konsistensi dalam mengembangkan ide & membaca sumber terpercaya': 'Konsistensi ide & baca sumber',
+    'Kemampuan berpikir dalam mengerjakan soal-soal sulit': 'Berpikir soal-soal sulit',
+    'Kemampuan penalaran logis dan analisis argumen': 'Penalaran logis & analisis',
+    'Kemampuan memecahkan masalah secara sistematis': 'Pemecahan masalah sistematis',
+    'Kemampuan mengambil keputusan berbasis data dan bukti': 'Keputusan berbasis data',
+    'Keterbukaan terhadap masukan dan kritik ilmiah': 'Terbuka kritik ilmiah',
+    'Manajemen keuangan dasar dan permodalan': 'Manajemen keuangan & modal',
+    'Kemampuan merancang produk/jasa yang relevan': 'Merancang produk/jasa',
+    'Keberanian memulai usaha dari nol': 'Berani mulai usaha dari nol',
+    'Konsistensi dan komitmen menjalankan bisnis': 'Konsisten menjalankan bisnis',
+    'Strategi pemasaran dan branding di media sosial': 'Pemasaran & branding medsos',
+}
+LABEL_FASILITAS_BIDANG = {
+    'Pelatihan debat/diplomasi yang aktif dan konsisten': 'Pelatihan debat aktif & konsisten',
+    'Kolaborasi antar fakultas untuk kegiatan debat lintas jurusan': 'Kolaborasi debat lintas jurusan',
+    'Pendampingan dari dosen atau alumni yang lebih kompeten': 'Pendampingan dosen/alumni kompeten',
+    'Workshop teknis pemula secara berkala': 'Workshop teknis pemula berkala',
+    'Komunitas robotika yang terbuka bagi pemula': 'Komunitas robotika terbuka',
+    'Wadah showcase untuk karya/proyek robotik': 'Wadah showcase karya robotik',
+    'Akses program pengabdian dengan pendampingan yang baik': 'Akses program & pendampingan baik',
+    'Pengakuan formal (SKPI, sertifikat, konversi kredit)': 'Pengakuan formal (SKPI/sertifikat)',
+    'Pembekalan teknis dan non-teknis sebelum turun ke lapangan': 'Pembekalan sebelum ke lapangan',
+    'Kemitraan dengan desa/kelompok masyarakat yang konsisten': 'Kemitraan desa konsisten',
+    'Pendanaan atau hibah untuk inisiasi program mandiri': 'Pendanaan program mandiri',
+    'Bantuan logistik dan transportasi ke lokasi pengabdian': 'Bantuan logistik & transportasi',
+    'Program pelatihan penalaran logis & critical thinking': 'Pelatihan penalaran & critical thinking',
+    'Kelas atau kegiatan untuk latihan pemecahan masalah berbasis kasus nyata': 'Latihan kasus nyata',
+    'Pendanaan untuk riset atau lomba akademik': 'Pendanaan riset/lomba akademik',
+    'Workshop ide riset atau proposal dari dosen/alumni': 'Workshop ide riset/proposal',
+    'Penyediaan ruang latihan atau simulasi debat': 'Ruang latihan/simulasi debat',
+    'Akses ke pelatihan wirausaha dengan profesional': 'Pelatihan wirausaha profesional',
+    'Inkubator bisnis dengan pendampingan intensif': 'Inkubator bisnis intensif',
+    'Pendanaan untuk ide bisnis yang dimiliki': 'Pendanaan ide bisnis',
+    'Pendampingan dari alumni yang sudah sukses berbisnis': 'Pendampingan alumni sukses',
+    'Workshop digital marketing dan legalitas usaha': 'Workshop digital marketing & legalitas',
+}
+
+
+def normalize_frekuensi(x):
+    if pd.isna(x):
+        return x
+    x = str(x).strip().lower().replace(' ', '')
+    m = re.match(r'(\d+)', x)
+    if not m:
+        return None
+    n = int(m.group(1))
+    if n > 8:
+        return None  # outlier tidak masuk akal (ex: "10 kali")
+    return f"{n}x/bulan"
+
 # ═══════════════════════════════════════════════════════
 # SIDEBAR FILTERS
 # ═══════════════════════════════════════════════════════
@@ -312,17 +463,38 @@ with t1:
         pct_tahu = (df_f['pengetahuan_fasilitasi'] == 'Ya').mean() * 100 if 'pengetahuan_fasilitasi' in df_f else None
         kpi("Tahu Fasilitasi Kompetitif", f"{pct_tahu:.0f}%" if pct_tahu is not None else "–", "minimal 1 program")
 
-    
-    sh("Profil Mahasiswa Selama Perkuliahan")
-    if 'profil_mhs' in df_f:
-        pc = df_f['profil_mhs'].map(LABEL_PROFIL).fillna(df_f['profil_mhs']).value_counts().sort_values(ascending=True)
-        fig = px.bar(pc, x=pc.values, y=pc.index, orientation='h', text=pc.values,
-                     color_discrete_sequence=[ACCENT])
-        fig.update_traces(textposition='outside')
-        st.plotly_chart(style_fig(fig, h=380), use_container_width=True)
-        top = pc.idxmax()
-        ib(f"Profil dominan adalah <b>{top}</b> ({pc.max()} orang, {pc.max()/pc.sum()*100:.0f}%) — "
-           f"mayoritas mahasiswa mengejar keseimbangan antara akademik dan aktivitas non-akademik, bukan fokus tunggal.")
+    ov1, ov2 = st.columns([1.3, 1])
+    with ov1:
+        sh("Profil Mahasiswa Selama Perkuliahan")
+        if 'profil_mhs' in df_f:
+            pc = map_short(df_f['profil_mhs'], LABEL_PROFIL).value_counts().sort_values(ascending=True)
+            fig = px.bar(pc, x=pc.values, y=pc.index, orientation='h', text=pc.values,
+                         color=pc.values, color_continuous_scale='Teal')
+            fig.update_traces(textposition='outside')
+            fig.update_layout(coloraxis_showscale=False)
+            st.plotly_chart(style_fig(fig, h=340), use_container_width=True)
+            top = pc.idxmax()
+            ib(f"Profil dominan adalah <b>{top}</b> ({pc.max()} orang, {pc.max()/pc.sum()*100:.0f}%) — "
+               f"mayoritas mahasiswa mengejar keseimbangan antara akademik dan aktivitas non-akademik, bukan fokus tunggal.")
+    with ov2:
+        sh("Snapshot Karakteristik")
+        radar_vals = []
+        radar_labels = []
+        for label, val in [("Adaptasi cepat", pct_cepat), ("Berminat kompetisi", pct_minat),
+                            ("Prefer kerja tim", pct_tim), ("Tahu Fasilitasi", pct_tahu)]:
+            if val is not None:
+                radar_labels.append(label)
+                radar_vals.append(val)
+        if radar_vals:
+            fig_r = go.Figure()
+            fig_r.add_trace(go.Scatterpolar(r=radar_vals + [radar_vals[0]],
+                                             theta=radar_labels + [radar_labels[0]],
+                                             fill='toself', line_color=ACCENT, fillcolor=ACCENT,
+                                             opacity=0.75))
+            fig_r.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, 100], gridcolor=border_col)),
+                                 showlegend=False)
+            st.plotly_chart(style_fig(fig_r, h=340), use_container_width=True)
+            st.caption("Setiap sumbu = persentase dari total responden (0–100%).")
 
     sh("Sebaran Bidang Minat Utama")
     if 'bidang_minat_utama' in df_f:
@@ -330,7 +502,7 @@ with t1:
         bc = bc[bc.index.isin(BIDANG_MAP_RAW.values())]
         fig = px.pie(values=bc.values, names=bc.index, hole=0.5, color_discrete_sequence=COLORWAY)
         fig.update_traces(textinfo='label+percent')
-        st.plotly_chart(style_fig(fig, h=400), use_container_width=True)
+        st.plotly_chart(style_fig(fig, h=380), use_container_width=True)
 
 # ═══════════════════════════════════════════════════════
 # TAB 2 — DEMOGRAFI
@@ -358,25 +530,27 @@ with t2:
     with d3:
         sh("Jalur Masuk")
         if 'jalur_masuk' in df_f:
-            jc = df_f['jalur_masuk'].value_counts().sort_values(ascending=True)
-            fig = px.bar(jc, x=jc.values, y=jc.index, orientation='h', text=jc.values,
-                         color=jc.values, color_continuous_scale='Blues')
-            fig.update_traces(textposition='outside')
+            jc = df_f['jalur_masuk'].value_counts()
+            fig = px.treemap(names=jc.index, parents=[""] * len(jc), values=jc.values,
+                              color=jc.values, color_continuous_scale='Blues')
+            fig.update_traces(textinfo='label+value+percent root', textfont_size=13)
             fig.update_layout(coloraxis_showscale=False)
             st.plotly_chart(style_fig(fig, h=350), use_container_width=True)
     with d4:
         sh("Distribusi Angkatan")
         if 'angkatan' in df_f:
-            ac = df_f['angkatan'].value_counts().sort_index(ascending=False)
-            fig = px.bar(x=ac.index.astype(str), y=ac.values, text=ac.values,
-                         color_discrete_sequence=[ACCENT])
-            fig.update_traces(textposition='outside')
+            ac = df_f['angkatan'].value_counts().sort_index()
+            fig = go.Figure(go.Scatter(x=ac.index.astype(str), y=ac.values, mode='lines+markers+text',
+                                        text=ac.values, textposition='top center',
+                                        line=dict(color=ACCENT, width=3), marker=dict(size=10),
+                                        fill='tozeroy', fillcolor='rgba(15,110,86,0.15)'))
+            fig.update_layout(yaxis_range=[0, ac.max() * 1.25])
             st.plotly_chart(style_fig(fig, h=350), use_container_width=True)
 
     sh("Komunitas yang Pernah/Sedang Diikuti")
     if 'komunitas' in df_f:
         ks = df_f['komunitas'].dropna().str.split(',').explode().str.strip()
-        ks = ks.map(lambda x: LABEL_KOMUNITAS.get(x, x))
+        ks = map_short(ks, LABEL_KOMUNITAS)
         kc = ks.value_counts().sort_values(ascending=True)
         fig = px.bar(kc, x=kc.values, y=kc.index, orientation='h', text=kc.values,
                      color=kc.values, color_continuous_scale='Greens')
@@ -495,12 +669,14 @@ with t4:
             rows.append({'Bidang': b, 'n': n, 'Ya': ya, 'pct': ya / n * 100 if n > 0 else 0})
     if rows:
         bidang_df = pd.DataFrame(rows).sort_values('pct')
-        fig = px.bar(bidang_df, x='pct', y='Bidang', orientation='h',
-                     text=[f"{p:.0f}% ({y}/{n})" for p, y, n in zip(bidang_df['pct'], bidang_df['Ya'], bidang_df['n'])],
-                     color_discrete_sequence=[ACCENT])
-        fig.update_traces(textposition='outside')
-        fig.update_layout(xaxis_range=[0, 100])
-        st.plotly_chart(style_fig(fig, h=350), use_container_width=True)
+        fig = px.scatter(bidang_df, x='pct', y='Bidang', size='n', color='pct',
+                          color_continuous_scale='Teal', size_max=55,
+                          text=[f"{p:.0f}%" for p in bidang_df['pct']])
+        fig.update_traces(textposition='middle right', textfont_size=12)
+        fig.update_layout(xaxis_range=[0, 100], xaxis_title="% pernah ikut kompetisi", coloraxis_showscale=False)
+        st.plotly_chart(style_fig(fig, h=330), use_container_width=True)
+        ib("Ukuran lingkaran = jumlah responden (n) per bidang — bidang dengan lingkaran kecil "
+           "(Debat, ICT) perlu dibaca hati-hati karena basis datanya tipis.")
         small_n = bidang_df[bidang_df['n'] < 15]['Bidang'].tolist()
         if small_n:
             st.markdown(f"<span class='small-note'>Catatan: n kecil untuk {', '.join(small_n)} — interpretasikan sebagai indikasi awal.</span>", unsafe_allow_html=True)
@@ -524,7 +700,8 @@ with t4:
                         fig.add_trace(go.Bar(y=ctp.index, x=ctp[cat], orientation='h', name=cat,
                                               marker_color=color, text=[f"{v:.0f}%" for v in ctp[cat]], textposition='inside'))
                 fig.update_layout(barmode='stack')
-                st.plotly_chart(style_fig(fig, title=f"Jalur Masuk × Adaptasi (V={v:.2f}, p={p:.3f})", h=320, legend_below=True), use_container_width=True)
+                st.plotly_chart(style_fig(fig, title="Jalur Masuk × Kecepatan Adaptasi", h=300, legend_below=True), use_container_width=True)
+                ib(explain_stat(p, v, "Kesimpulan: jalur masuk mahasiswa <b>tidak berkaitan</b> dengan cepat-tidaknya beradaptasi."))
 
     with cb:
         if all(k in df_f for k in ['bidang_minat_utama', 'kerja_sendiri']):
@@ -541,18 +718,22 @@ with t4:
                         fig2.add_trace(go.Bar(y=ct2p.index, x=ct2p[cat], orientation='h', name=lbl,
                                                marker_color=color, text=[f"{v:.0f}%" for v in ct2p[cat]], textposition='inside'))
                 fig2.update_layout(barmode='stack')
-                st.plotly_chart(style_fig(fig2, title=f"Bidang × Gaya Kerja (V={vb:.2f}, p={pb:.3f})", h=320, legend_below=True), use_container_width=True)
+                st.plotly_chart(style_fig(fig2, title="Bidang Minat × Gaya Kerja", h=300, legend_below=True), use_container_width=True)
+                ib(explain_stat(pb, vb, "Kesimpulan: bidang minat <b>tidak berkaitan kuat</b> dengan preferensi kerja sendiri/tim."))
 
-    sh("Fasilitas Paling Diharapkan per Bidang")
+    sh("Fasilitas & Skill Paling Diprioritaskan per Bidang")
     fas_rows = []
     for b in BIDANG_LIST:
-        col = cmap.get(f'{b}__fasilitas')
-        if col and col in df.columns:
-            vc = df_f[col].value_counts()
+        col_f = cmap.get(f'{b}__fasilitas')
+        col_s = cmap.get(f'{b}__skill')
+        if col_f and col_f in df.columns:
+            vc = df_f[col_f].value_counts()
+            vc_s = df_f[col_s].value_counts() if col_s and col_s in df.columns else pd.Series(dtype=int)
             if len(vc) > 0:
-                top = vc.index[0]
-                fas_rows.append({'Bidang': b, 'Fasilitas paling diharapkan': top,
-                                  '%': f"{vc.iloc[0]/vc.sum()*100:.0f}%", 'n': vc.sum()})
+                top_f = LABEL_FASILITAS_BIDANG.get(vc.index[0], shorten(vc.index[0], 50))
+                top_s = LABEL_SKILL_BIDANG.get(vc_s.index[0], shorten(vc_s.index[0], 50)) if len(vc_s) > 0 else "–"
+                fas_rows.append({'Bidang': b, 'Fasilitas paling diharapkan': top_f, '%': f"{vc.iloc[0]/vc.sum()*100:.0f}%",
+                                  'Skill paling dibutuhkan': top_s, 'n': vc.sum()})
     if fas_rows:
         st.dataframe(pd.DataFrame(fas_rows), use_container_width=True, hide_index=True)
 
@@ -622,80 +803,142 @@ with t5:
         n_col = heat_df.pop('n')
         heat_df = heat_df.round(0)
 
-        fig_h = go.Figure(data=go.Heatmap(
-            z=heat_df.values, x=heat_df.columns, y=[f"{i} (n={n_col[i]})" for i in heat_df.index],
-            colorscale='Blues', text=heat_df.values, texttemplate="%{text:.0f}%",
-            showscale=False))
-        st.plotly_chart(style_fig(fig_h, h=350), use_container_width=True)
+        hcol1, hcol2 = st.columns([1, 1])
+        with hcol1:
+            fig_h = go.Figure(data=go.Heatmap(
+                z=heat_df.values, x=heat_df.columns, y=[f"{i} (n={n_col[i]})" for i in heat_df.index],
+                colorscale='Blues', text=heat_df.values, texttemplate="%{text:.0f}%",
+                showscale=False))
+            st.plotly_chart(style_fig(fig_h, h=340), use_container_width=True)
+        with hcol2:
+            fig_radar = go.Figure()
+            theta = list(heat_df.columns) + [heat_df.columns[0]]
+            for i, (bidang, row) in enumerate(heat_df.iterrows()):
+                vals = list(row.values) + [row.values[0]]
+                fig_radar.add_trace(go.Scatterpolar(r=vals, theta=theta, name=bidang,
+                                                      line_color=COLORWAY[i % len(COLORWAY)], opacity=0.85))
+            fig_radar.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, 100], gridcolor=border_col)),
+                                     legend=dict(orientation="h", yanchor="bottom", y=-0.35, xanchor="center", x=0.5, font=dict(size=10)))
+            st.plotly_chart(style_fig(fig_radar, h=340), use_container_width=True)
+        ib("Heatmap dan radar menunjukkan data yang sama, dua sudut pandang berbeda: heatmap untuk baca "
+           "angka presisi per sel, radar untuk lihat sekilas bidang mana yang \"bentuk preferensinya\" mirip satu sama lain.")
 
     sh("Peran & Tipe Mentor")
     m1, m2 = st.columns(2)
     with m1:
         if 'tipe_mentor' in df_f:
-            tc = df_f['tipe_mentor'].value_counts().head(6).sort_values(ascending=True)
-            fig = px.bar(tc, x=tc.values, y=tc.index, orientation='h', text=tc.values,
-                         color_discrete_sequence=[ACCENT])
-            fig.update_traces(textposition='outside')
-            st.plotly_chart(style_fig(fig, title="Tipe mentor yang diharapkan", h=350), use_container_width=True)
+            tc = df_f['tipe_mentor'].dropna().str.split(',').explode().str.strip()
+            tc = map_short(tc, LABEL_MENTOR)
+            tc = tc.value_counts()
+            fig = px.treemap(names=tc.index, parents=[""] * len(tc), values=tc.values,
+                              color=tc.values, color_continuous_scale='Purp')
+            fig.update_traces(textinfo='label+value', textfont_size=12)
+            fig.update_layout(coloraxis_showscale=False)
+            st.plotly_chart(style_fig(fig, title="Tipe mentor yang diharapkan (multi-select)", h=350), use_container_width=True)
     with m2:
         if 'frekuensi_pembinaan' in df_f:
-            fc = df_f['frekuensi_pembinaan'].value_counts()
+            fc = df_f['frekuensi_pembinaan'].map(normalize_frekuensi).dropna().value_counts()
             fig = px.pie(values=fc.values, names=fc.index, hole=0.5, color_discrete_sequence=COLORWAY)
+            fig.update_traces(textinfo='label+percent')
             st.plotly_chart(style_fig(fig, title="Frekuensi pembinaan ideal per bulan", h=350), use_container_width=True)
+
+    sh("Kriteria Mentor \"Ideal\" Menurut Mahasiswa")
+    if 'kriteria_mentor' in df_f:
+        # opsi "Tegas, disiplin, tapi suportif" mengandung koma internal — lindungi dulu sebelum split
+        placeholder = "Tegas|disiplin|tapi suportif"
+        krc_raw = df_f['kriteria_mentor'].dropna().str.replace(
+            'Tegas, disiplin, tapi suportif', placeholder, regex=False)
+        krc = krc_raw.str.split(',').explode().str.strip()
+        krc = krc.str.replace(placeholder, 'Tegas, disiplin, tapi suportif', regex=False)
+        krc = map_short(krc, LABEL_KRITERIA_MENTOR)
+        krc = krc.value_counts().sort_values(ascending=True)
+        fig = px.bar(krc, x=krc.values, y=krc.index, orientation='h', text=krc.values,
+                     color=krc.values, color_continuous_scale='Purp')
+        fig.update_traces(textposition='outside')
+        fig.update_layout(coloraxis_showscale=False)
+        st.plotly_chart(style_fig(fig, h=380), use_container_width=True)
+        ib("Multi-select (maksimal 3 pilihan per responden) — <b>rutin memberi arahan</b> dan "
+           "<b>fleksibel/terbuka diskusi</b> jadi dua kriteria paling banyak diminta, mengalahkan "
+           "faktor \"galak vs santai\" yang sering diasumsikan penting.")
 
 # ═══════════════════════════════════════════════════════
 # TAB 6 — FASILITASI KOMPETISI
 # ═══════════════════════════════════════════════════════
 with t6:
-    k1, k2, k3, k4 = st.columns(4)
+    k1, k2 = st.columns(2)
     with k1:
         v = (df_f['pengetahuan_fasilitasi'] == 'Ya').mean() * 100 if 'pengetahuan_fasilitasi' in df_f else None
-        kpi("Tahu Fasilitasi", f"{v:.0f}%" if v is not None else "–")
+        kpi("Tahu Fasilitasi", f"{v:.0f}%" if v is not None else "–", "minimal 1 program")
     with k2:
         v = (df_f['pernah_pakai'] == 'Ya').mean() * 100 if 'pernah_pakai' in df_f else None
-        kpi("Pernah pakai", f"{v:.0f}%" if v is not None else "–")
-    with k3:
-        v = df_f['kualitas_layanan'].dropna().astype(float).mean() if 'kualitas_layanan' in df_f else None
-        kpi("Kualitas layanan", f"{v:.2f}/4.0" if v is not None else "–")
-    with k4:
-        v = df_f['promosi_efektif'].dropna().astype(float).mean() if 'promosi_efektif' in df_f else None
-        kpi("Keterjangkauan promosi", f"{v:.2f}/4.0" if v is not None else "–")
+        kpi("Pernah pakai fasilitasi", f"{v:.0f}%" if v is not None else "–", "dari total responden")
 
-    
+    g1, g2, g3, g4 = st.columns(4)
+    gauge_data = [
+        ('kualitas_layanan', 'Kualitas layanan', g1),
+        ('promosi_efektif', 'Keterjangkauan promosi', g2),
+        ('kemudahan_alur', 'Kemudahan alur', g3),
+        ('kecepatan_verif', 'Kecepatan verifikasi', g4),
+    ]
+    for col_key, label, container in gauge_data:
+        with container:
+            if col_key in df_f:
+                val = df_f[col_key].dropna().astype(float).mean()
+                fig = go.Figure(go.Indicator(
+                    mode="gauge+number", value=val, number={'suffix': "/4", 'font': {'size': 24}},
+                    gauge={'axis': {'range': [0, 4], 'tickwidth': 1},
+                           'bar': {'color': ACCENT if val >= 2.5 else ACCENT2},
+                           'steps': [{'range': [0, 2], 'color': hover_bg}, {'range': [2, 4], 'color': bg_panel}],
+                           'threshold': {'line': {'color': text_muted, 'width': 2}, 'value': 2.5}}))
+                st.plotly_chart(style_fig(fig, title=label, h=220), use_container_width=True)
+    ib("Skala 1–4. Nilai di bawah 2,5 (garis abu-abu) menandakan area yang perlu diperbaiki lebih dulu.")
+
     f1, f2 = st.columns(2)
     with f1:
         sh("Sumber Informasi Fasilitasi")
         if 'sumber_info' in df_f:
-            sc = df_f['sumber_info'].dropna().str.split(',').explode().str.strip().value_counts().sort_values(ascending=True)
+            sc = df_f['sumber_info'].dropna().str.split(',').explode().str.strip()
+            sc = map_short(sc, LABEL_SUMBER).value_counts().sort_values(ascending=True)
             fig = px.bar(sc, x=sc.values, y=sc.index, orientation='h', text=sc.values,
-                         color_discrete_sequence=[ACCENT])
+                         color=sc.values, color_continuous_scale='Teal')
             fig.update_traces(textposition='outside')
+            fig.update_layout(coloraxis_showscale=False)
             st.plotly_chart(style_fig(fig, h=350), use_container_width=True)
     with f2:
         sh("Media Promosi yang Disukai")
         if 'media_suka' in df_f:
-            mc = df_f['media_suka'].dropna().str.split(',').explode().str.strip().value_counts().sort_values(ascending=True)
+            mc = df_f['media_suka'].dropna().str.split(',').explode().str.strip()
+            mc = map_short(mc, LABEL_MEDIA).value_counts().sort_values(ascending=True)
             fig = px.bar(mc, x=mc.values, y=mc.index, orientation='h', text=mc.values,
-                         color_discrete_sequence=['#378ADD'])
+                         color=mc.values, color_continuous_scale='Blues')
             fig.update_traces(textposition='outside')
+            fig.update_layout(coloraxis_showscale=False)
             st.plotly_chart(style_fig(fig, h=350), use_container_width=True)
+    ib("Instagram (feed & story) dan komunikasi grup angkatan mendominasi baik sebagai sumber info yang "
+       "sudah efektif maupun sebagai media yang paling disukai — konsisten, jadi prioritas jelas untuk promosi ke depan.")
 
-    sh("Kendala & Evaluasi")
+    sh("Kendala & Evaluasi yang Diusulkan")
     e1, e2 = st.columns(2)
     with e1:
         if 'kendala' in df_f:
-            kc = df_f['kendala'].dropna().str.split(',').explode().str.strip().value_counts().sort_values(ascending=True).tail(8)
+            kc = df_f['kendala'].dropna().str.split(',').explode().str.strip()
+            kc = kc[kc.str.len() > 2]
+            kc = map_short(kc, LABEL_KENDALA).value_counts().sort_values(ascending=True).tail(8)
             fig = px.bar(kc, x=kc.values, y=kc.index, orientation='h', text=kc.values,
-                         color_discrete_sequence=[ACCENT2])
+                         color=kc.values, color_continuous_scale='Oranges')
             fig.update_traces(textposition='outside')
-            st.plotly_chart(style_fig(fig, title="Kendala utama", h=350), use_container_width=True)
+            fig.update_layout(coloraxis_showscale=False)
+            st.plotly_chart(style_fig(fig, title="Kendala utama", h=360), use_container_width=True)
     with e2:
         if 'evaluasi' in df_f:
-            ec = df_f['evaluasi'].dropna().str.split(',').explode().str.strip().value_counts().sort_values(ascending=True).tail(8)
+            ec = df_f['evaluasi'].dropna().str.split(',').explode().str.strip()
+            ec = ec[ec.isin(LABEL_EVALUASI.keys())]
+            ec = map_short(ec, LABEL_EVALUASI).value_counts().sort_values(ascending=True)
             fig = px.bar(ec, x=ec.values, y=ec.index, orientation='h', text=ec.values,
-                         color_discrete_sequence=[ACCENT3])
+                         color=ec.values, color_continuous_scale='Purp')
             fig.update_traces(textposition='outside')
-            st.plotly_chart(style_fig(fig, title="Evaluasi yang diusulkan", h=350), use_container_width=True)
+            fig.update_layout(coloraxis_showscale=False)
+            st.plotly_chart(style_fig(fig, title="Evaluasi yang diusulkan", h=360), use_container_width=True)
 
 # ═══════════════════════════════════════════════════════
 # TAB 7 — INSIGHT TEKS
@@ -722,11 +965,39 @@ with t7:
             fig = go.Figure(data=go.Heatmap(
                 z=lift_matrix, x=short_labels, y=short_labels, colorscale='RdBu_r',
                 zmid=1, text=lift_matrix, texttemplate="%{text:.2f}"))
-            st.plotly_chart(style_fig(fig, h=480), use_container_width=True)
+            st.plotly_chart(style_fig(fig, h=460), use_container_width=True)
             st.caption("Q1: Analisis data · Q2: Paper ilmiah · Q3: Bisnis/tekno · Q4: Coding/AI · "
                        "Q5: Ide bisnis · Q6: Pitching · Q7: Argumen persuasif · Q8: Diskusi sosial")
-            ib("Lift >1 berarti asosiasi lebih kuat dari base rate, <1 lebih lemah. Diagonal dikosongkan "
-               "karena otomatis bernilai maksimum. Asosiasi terkuat: <b>Q5↔Q6 (ide bisnis ↔ pitching)</b>.")
+
+            flat = [(short_labels[i], short_labels[j], lift_matrix[i, j])
+                    for i in range(8) for j in range(8) if i != j and not np.isnan(lift_matrix[i, j])]
+            top_pair = max(flat, key=lambda x: x[2])
+            low_pair = min(flat, key=lambda x: x[2])
+            pct_up = (top_pair[2] - 1) * 100
+            pct_down = (1 - low_pair[2]) * 100
+            ib(f"<b>Cara baca lift:</b> angka 1,00 berarti dua minat itu independen (tidak saling terkait). "
+               f"Di atas 1 berarti saling memperkuat, di bawah 1 berarti saling melemahkan. Contoh: lift "
+               f"<b>{top_pair[0]}→{top_pair[1]} = {top_pair[2]:.2f}</b> artinya mahasiswa yang tertarik "
+               f"{top_pair[0]} punya peluang <b>{pct_up:.0f}% lebih tinggi</b> dari rata-rata untuk juga "
+               f"tertarik {top_pair[1]}. Sebaliknya, lift <b>{low_pair[0]}→{low_pair[1]} = {low_pair[2]:.2f}</b> "
+               f"artinya peluangnya <b>{pct_down:.0f}% lebih rendah</b> dari rata-rata — dua minat itu "
+               f"cenderung saling eksklusif.")
+
+    sh("Program Fasilitasi yang Paling Dikenal")
+    if 'program_diketahui' in df_f:
+        pd_short = {
+            'Fasilitasi Pendanaan Kompetitif Mandiri Nasional & International': 'Pendanaan Kompetitif',
+            'Fasilitasi Administratif Kompetitif Mandiri Nasional & International': 'Administratif Kompetitif',
+            'Fasilitasi Pembinaan Kompetitif Mandiri Nasional & International': 'Pembinaan Kompetitif',
+            'Fasilitasi Insentif Prestasi Kompetitif Mandiri': 'Insentif Prestasi',
+        }
+        pdc = df_f['program_diketahui'].dropna().str.split(',').explode().str.strip()
+        pdc = map_short(pdc, pd_short).value_counts()
+        fig = px.treemap(names=pdc.index, parents=[""] * len(pdc), values=pdc.values,
+                          color=pdc.values, color_continuous_scale='Greens')
+        fig.update_traces(textinfo='label+value+percent root', textfont_size=13)
+        fig.update_layout(coloraxis_showscale=False)
+        st.plotly_chart(style_fig(fig, h=320), use_container_width=True)
 
     sh("Wordcloud Saran Mahasiswa")
     if 'saran' in df_f and WC_OK:
