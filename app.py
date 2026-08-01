@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 import glob
 import re
 from collections import Counter
-from scipy.stats import chi2_contingency
+from scipy.stats import chi2_contingency, fisher_exact
 
 try:
     from wordcloud import WordCloud
@@ -48,38 +48,68 @@ ACCENT3 = "#EDA100"      # amber — netral/perhatian
 # ═══════════════════════════════════════════════════════
 st.markdown(f"""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 .stApp, p, h1, h2, h3, h4, h5, h6, label, li, .stMarkdown div {{
     font-family: 'Inter', -apple-system, sans-serif !important;
 }}
 .stApp {{ background: {bg_app} !important; color: {text_main} !important; }}
-.main .block-container {{ padding-top: 1rem; padding-bottom: 2rem; max-width: 100%; }}
+.main .block-container {{ padding-top: .8rem; padding-bottom: 3rem; max-width: 100%; }}
 [data-testid="stHeader"] {{ background: rgba(0,0,0,0) !important; }}
+
+/* ── Sidebar ── */
 [data-testid="stSidebar"] {{ background-color: {bg_panel} !important; border-right: 1px solid {border_col} !important; }}
 [data-testid="stSidebar"] p, [data-testid="stSidebar"] div, [data-testid="stSidebar"] span {{ color: {text_main} !important; font-size: 14px; }}
 [data-testid="stSidebar"] .stSelectbox>label, [data-testid="stSidebar"] .stMultiSelect>label {{
     color: {text_muted} !important; font-size: 11px !important; font-weight: 700 !important;
     text-transform: uppercase; letter-spacing: .6px;
 }}
-div[data-baseweb="select"] > div {{ background-color: {bg_panel} !important; color: {text_main} !important; border-color: {border_col} !important; }}
+div[data-baseweb="select"] > div {{ background-color: {bg_app} !important; color: {text_main} !important; border-color: {border_col} !important; border-radius: 10px !important; }}
 ul[role="listbox"] {{ background-color: {bg_panel} !important; }}
 li[role="option"] {{ color: {text_main} !important; background-color: {bg_panel} !important; }}
-[data-testid="stDataFrame"] {{ background-color: {bg_panel} !important; border: 1px solid {border_col}; border-radius: 8px; }}
-.stTabs [data-baseweb="tab-list"] {{ background-color: {bg_panel} !important; border-radius: 14px; padding: 6px; gap: 4px; border: 1px solid {border_col} !important; }}
-.stTabs button[role="tab"] {{ background: transparent !important; border-radius: 10px; padding: 10px 14px; font-weight: 600; font-size: 13px !important; }}
+span[data-baseweb="tag"] {{ background-color: {hover_bg} !important; border: 1px solid {ACCENT} !important; border-radius: 6px !important; }}
+span[data-baseweb="tag"] span {{ color: {ACCENT} !important; }}
+
+/* ── Dataframe ── */
+[data-testid="stDataFrame"] {{ background-color: {bg_panel} !important; border: 1px solid {border_col}; border-radius: 14px; overflow: hidden; }}
+
+/* ── Charts as elevated cards ── */
+[data-testid="stPlotlyChart"] {{
+    background: {bg_panel} !important; border: 1px solid {border_col}; border-radius: 16px;
+    padding: 14px 10px 6px 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}}
+
+/* ── Tabs ── */
+.stTabs [data-baseweb="tab-list"] {{ background-color: {bg_panel} !important; border-radius: 14px; padding: 6px; gap: 4px; border: 1px solid {border_col} !important; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }}
+.stTabs button[role="tab"] {{ background: transparent !important; border-radius: 10px; padding: 10px 16px; font-weight: 600; font-size: 13px !important; transition: all .15s ease; }}
 .stTabs button[role="tab"] p {{ color: {text_muted} !important; }}
-.stTabs button[aria-selected="true"] {{ background: {ACCENT} !important; }}
-.stTabs button[aria-selected="true"] p {{ color: white !important; }}
-.kpi-card {{ background: {bg_panel}; border: 1px solid {border_col}; border-radius: 14px; padding: 18px 20px; }}
-.kpi-label {{ color: {text_muted}; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; margin-bottom: 6px; }}
-.kpi-value {{ color: {text_main}; font-size: 30px; font-weight: 800; line-height: 1.1; }}
-.kpi-sub {{ color: {text_muted}; font-size: 12.5px; margin-top: 4px; }}
-.insight-box {{ background: {hover_bg}; border-left: 4px solid {ACCENT}; border-radius: 8px; padding: 14px 18px; margin: 10px 0 18px 0; }}
-.insight-box p {{ color: {text_main} !important; font-size: 14px; margin: 0; line-height: 1.65; }}
-.section-title {{ font-size: 17px; font-weight: 700; color: {text_main}; margin: 14px 0 2px 0; padding-bottom: 5px; border-bottom: 2px solid {border_col}; }}
-div[data-testid="stVerticalBlock"] > div:has(> div.stMarkdown) {{ gap: 0.3rem; }}
+.stTabs button[aria-selected="true"] {{ background: linear-gradient(135deg, {ACCENT}, #14876B) !important; box-shadow: 0 3px 8px rgba(15,110,86,0.3); }}
+.stTabs button[aria-selected="true"] p {{ color: white !important; font-weight: 700 !important; }}
+
+/* ── KPI cards ── */
+.kpi-card {{ background: {bg_panel}; border: 1px solid {border_col}; border-left: 4px solid {ACCENT};
+    border-radius: 14px; padding: 18px 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.05); transition: transform .15s ease; }}
+.kpi-label {{ color: {text_muted}; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .7px; margin-bottom: 8px; }}
+.kpi-value {{ color: {text_main}; font-size: 32px; font-weight: 800; line-height: 1.1; letter-spacing: -0.5px; }}
+.kpi-sub {{ color: {text_muted}; font-size: 12.5px; margin-top: 5px; }}
+
+/* ── Insight box ── */
+.insight-box {{ background: {hover_bg}; border: 1px solid {ACCENT}33; border-left: 4px solid {ACCENT};
+    border-radius: 12px; padding: 16px 20px; margin: 12px 0 20px 0; }}
+.insight-box p {{ color: {text_main} !important; font-size: 13.8px; margin: 0; line-height: 1.7; }}
+
+/* ── Section titles ── */
+.section-title {{ font-size: 18px; font-weight: 700; color: {text_main}; margin: 22px 0 12px 0;
+    padding-left: 12px; border-left: 4px solid {ACCENT}; letter-spacing: -0.2px; }}
 .element-container {{ margin-bottom: 0 !important; }}
 .small-note {{ color: {text_muted}; font-size: 12px; font-style: italic; }}
+
+/* ── Header banner ── */
+.dash-header {{ background: linear-gradient(120deg, {ACCENT} 0%, #14876B 60%, #1B9E7E 100%);
+    border-radius: 18px; padding: 22px 28px; margin-bottom: 18px; box-shadow: 0 4px 16px rgba(15,110,86,0.25); }}
+.dash-header .title {{ font-size: 25px; font-weight: 800; color: white; letter-spacing: -0.3px; }}
+.dash-header .subtitle {{ color: rgba(255,255,255,0.85); font-size: 13px; margin-top: 3px; }}
+.dash-header .meta {{ color: rgba(255,255,255,0.75); font-size: 12px; text-align: right; line-height: 1.6; }}
+.dash-header .meta b {{ color: white; }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -127,8 +157,8 @@ def map_short(series, label_dict, fallback_n=44):
     return series.map(lambda x: label_dict.get(x, shorten(x, fallback_n)) if pd.notna(x) else x)
 
 
-def explain_stat(p, v, context=""):
-    """Kotak penjelasan awam untuk uji chi-square & Cramér's V, dengan angka aktual."""
+def explain_stat(p, v, context="", test_name="Chi-square"):
+    """Kotak penjelasan awam untuk uji asosiasi & Cramér's V, dengan angka aktual."""
     sig = p < 0.05
     p_txt = (f"karena p-value = <b>{p:.3f}</b> (di bawah 0,05), secara statistik pola ini "
              f"<b>cukup meyakinkan bukan kebetulan acak</b>") if sig else \
@@ -142,11 +172,38 @@ def explain_stat(p, v, context=""):
         v_txt = "keterkaitannya lemah-sedang"
     else:
         v_txt = "keterkaitannya cukup kuat"
-    return (f"<b>Cara baca:</b> p-value mengukur seberapa besar kemungkinan pola ini muncul "
+    return (f"<b>Cara baca ({test_name}):</b> p-value mengukur seberapa besar kemungkinan pola ini muncul "
             f"cuma karena kebetulan acak — semakin kecil p-value (di bawah 0,05), semakin "
             f"meyakinkan bahwa pola itu nyata. Di sini {p_txt}. Cramér's V (0–1) mengukur "
             f"<i>seberapa kuat</i> keterkaitannya — nilai <b>{v:.2f}</b> berarti {v_txt}. "
             f"{context}")
+
+
+def run_assoc_test(ct):
+    """
+    Uji asosiasi 2 variabel kategorikal, otomatis pilih metode sesuai kaidah statistik:
+    - Tabel 2x2 dengan sel kecil -> Fisher's Exact Test (lebih valid untuk n kecil)
+    - Tabel lain -> Chi-square, dengan pengecekan aturan Cochran (maks 20% sel expected count <5,
+      tidak ada sel expected count <1). Kalau dilanggar, hasil ditandai caveat eksplisit.
+    Mengembalikan dict: {test_name, p, v, valid, warning}
+    """
+    chi2, p_chi, dof, expected = chi2_contingency(ct)
+    nobs = ct.sum().sum()
+    v = np.sqrt(chi2 / (nobs * (min(ct.shape) - 1))) if min(ct.shape) > 1 else np.nan
+
+    pct_low = (expected < 5).sum() / expected.size * 100
+    any_below_1 = (expected < 1).any()
+    cochran_violated = pct_low > 20 or any_below_1
+
+    if ct.shape == (2, 2) and cochran_violated:
+        _, p_fisher = fisher_exact(ct.values)
+        return {'test_name': "Fisher's Exact Test", 'p': p_fisher, 'v': v,
+                'warning': "Tabel 2×2 dengan sel kecil — dipakai Fisher's Exact Test (lebih akurat dari chi-square untuk n kecil), bukan chi-square biasa."}
+    elif cochran_violated:
+        return {'test_name': "Chi-square", 'p': p_chi, 'v': v,
+                'warning': f"Peringatan: {pct_low:.0f}% sel punya expected count di bawah 5 (aturan Cochran dilanggar) — hasil chi-square ini kurang reliabel, baca sebagai indikasi awal saja."}
+    else:
+        return {'test_name': "Chi-square", 'p': p_chi, 'v': v, 'warning': None}
 
 
 # ═══════════════════════════════════════════════════════
@@ -192,11 +249,11 @@ def load_data():
                       fasilitas='mendukung perkembangan kamu'),
     }
     idx_bidang = {
-        'Debat & Diplomasi': dict(kompetisi=44, skill=47, fasilitas=49),
-        'ICT–Robotika': dict(kompetisi=51, skill=54, fasilitas=56),
-        'Pengabdian': dict(kompetisi=58, skill=62, fasilitas=64),
-        'Sains & Penalaran': dict(kompetisi=66, skill=69, fasilitas=71),
-        'Bisnis': dict(kompetisi=73, skill=76, fasilitas=78),
+        'Debat & Diplomasi': dict(kompetisi=44, skill=47, target=48, fasilitas=49),
+        'ICT–Robotika': dict(kompetisi=51, skill=54, target=55, fasilitas=56),
+        'Pengabdian': dict(kompetisi=58, skill=62, target=63, fasilitas=64),
+        'Sains & Penalaran': dict(kompetisi=66, skill=69, target=70, fasilitas=71),
+        'Bisnis': dict(kompetisi=73, skill=76, target=77, fasilitas=78),
     }
     for bidang, idx in idx_bidang.items():
         for key, i in idx.items():
@@ -398,6 +455,34 @@ LABEL_FASILITAS_BIDANG = {
 }
 
 
+LABEL_TARGET_BIDANG = {
+    'Mengembangkan skill public speaking dan berpikir cepat': 'Skill public speaking & cepat',
+    'Mahasiswa Berprestasi': 'Jadi mahasiswa berprestasi',
+    'Menang lomba debat di tingkat regional/nasional': 'Menang lomba debat regional/nasional',
+    'Menjadi perwakilan kampus dalam forum diplomasi (seperti MUN)': 'Perwakilan kampus forum diplomasi',
+    'Membangun portofolio prestasi untuk beasiswa atau karier': 'Portofolio untuk beasiswa/karier',
+    'Mengembangkan portofolio proyek untuk karier di bidang teknologi': 'Portofolio proyek karier teknologi',
+    'Masih eksplorasi, belum punya target pasti': 'Masih eksplorasi',
+    'Mengikuti dan menang dalam lomba robotika': 'Menang lomba robotika',
+    'Bergabung dalam tim robotika resmi kampus': 'Gabung tim robotika kampus',
+    'Menyusun dan menjalankan program sosial yang berdampak nyata bagi  masyarakat': 'Program sosial berdampak nyata',
+    'Mengikuti kompetisi di bidang pengabdian masyarakat (PPKO, PKM PM, dll)': 'Kompetisi pengabdian (PPKO/PKM)',
+    'Belum punya target, masih ingin belajar dan ikut serta': 'Belum punya target, ingin belajar',
+    'Terlibat aktif dalam program desa binaan': 'Terlibat program desa binaan',
+    'Mendapatkan dan berkolaborasi dengan mitra eksternal (LSM, CSR, dll.)': 'Kolaborasi mitra eksternal',
+    'Menang dalam kompetisi (LKTI, esai, riset, Olimpiade, debat ilmiah)': 'Menang kompetisi ilmiah (LKTI/riset)',
+    'Mempublikasikan karya atau gagasan di media ilmiah/populer kredibel': 'Publikasi karya ilmiah',
+    'Belum punya target pasti, masih eksplorasi': 'Belum punya target, eksplorasi',
+    'Meningkatkan kemampuan berpikir kritis terukur (misal asesmen/tes)': 'Berpikir kritis terukur',
+    'Mengikuti konferensi atau forum ilmiah mahasiswa': 'Konferensi/forum ilmiah',
+    'Menang kompetisi ide bisnis atau proposal usaha (Bussiness Plan Competition, Bussines Case Competition, Bussiness Model Canvas, dll)': 'Menang kompetisi ide bisnis',
+    'Memulai bisnis sendiri meskipun kecil': 'Memulai bisnis sendiri',
+    'Bergabung di inkubator bisnis mahasiswa': 'Gabung inkubator bisnis',
+    'Masih tahap belajar, ingin tahu lebih dulu': 'Masih tahap belajar',
+    'Mengembangkan usaha yang sudah berjalan': 'Kembangkan usaha berjalan',
+}
+
+
 def normalize_frekuensi(x):
     if pd.isna(x):
         return x
@@ -434,10 +519,10 @@ N = len(df_f)
 # ═══════════════════════════════════════════════════════
 # HEADER
 # ═══════════════════════════════════════════════════════
-st.markdown(f"""<div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;'>
-<div><span style='font-size:26px; font-weight:800; color:{text_main}'>Dashboard Analisis Survey Prestasi</span><br>
-<span style='color:{text_muted}; font-size:13.5px'>IPB University — Fasilitasi Kompetitif Mahasiswa</span></div>
-<div style='text-align:right; color:{text_muted}; font-size:12.5px'>n = {N} responden{" (terfilter)" if N != len(df) else f" dari {len(df)}"}</div>
+st.markdown(f"""<div class='dash-header' style='display:flex; justify-content:space-between; align-items:center;'>
+<div><div class='title'>Dashboard Analisis Survey Prestasi</div>
+<div class='subtitle'>IPB University — Fasilitasi Kompetitif Mahasiswa · Purposive sampling, 4 Feb–21 Mar 2026</div></div>
+<div class='meta'>n = <b>{N}</b> responden{" (terfilter)" if N != len(df) else f" dari {len(df)}"}<br>Skala kepuasan 1–4</div>
 </div>""", unsafe_allow_html=True)
 
 t1, t2, t3, t4, t5, t6, t7 = st.tabs(
@@ -688,9 +773,7 @@ with t4:
             valid = df_f[df_f['jalur_masuk'].isin(['SNBP', 'SNBT', 'Mandiri', 'Jaketos', 'PIN/ Talenta IPB'])]
             ct = pd.crosstab(valid['jalur_masuk'], valid['adaptasi_cepat'])
             if ct.shape[0] > 1 and ct.shape[1] > 1:
-                chi2, p, dof, _ = chi2_contingency(ct)
-                nobs = ct.sum().sum()
-                v = np.sqrt(chi2 / (nobs * (min(ct.shape) - 1)))
+                res = run_assoc_test(ct)
                 ctp = ct.div(ct.sum(axis=1), axis=0) * 100
                 ctp = ctp.loc[ctp.get('Ya', pd.Series(dtype=float)).sort_values(ascending=True).index] if 'Ya' in ctp else ctp
                 fig = go.Figure()
@@ -700,16 +783,16 @@ with t4:
                                               marker_color=color, text=[f"{v:.0f}%" for v in ctp[cat]], textposition='inside'))
                 fig.update_layout(barmode='stack')
                 st.plotly_chart(style_fig(fig, title="Jalur Masuk × Kecepatan Adaptasi", h=300, legend_below=True), use_container_width=True)
-                ib(explain_stat(p, v, "Kesimpulan: jalur masuk mahasiswa <b>tidak berkaitan</b> dengan cepat-tidaknya beradaptasi."))
+                if res['warning']:
+                    st.markdown(f"<span class='small-note'>⚠ {res['warning']}</span>", unsafe_allow_html=True)
+                ib(explain_stat(res['p'], res['v'], "Kesimpulan: jalur masuk mahasiswa <b>tidak berkaitan</b> dengan cepat-tidaknya beradaptasi.", res['test_name']))
 
     with cb:
         if all(k in df_f for k in ['bidang_minat_utama', 'kerja_sendiri']):
             valid = df_f[df_f['bidang_minat_utama'].isin(BIDANG_MAP_RAW.values())]
             ct2 = pd.crosstab(valid['bidang_minat_utama'], valid['kerja_sendiri'])
             if ct2.shape[0] > 1 and ct2.shape[1] > 1:
-                chi2b, pb, dofb, _ = chi2_contingency(ct2)
-                nb = ct2.sum().sum()
-                vb = np.sqrt(chi2b / (nb * (min(ct2.shape) - 1)))
+                res2 = run_assoc_test(ct2)
                 ct2p = ct2.div(ct2.sum(axis=1), axis=0) * 100
                 fig2 = go.Figure()
                 for cat, color, lbl in zip(['Tidak', 'Ya'], ['#7F77DD', '#378ADD'], ['Lebih suka tim', 'Lebih suka sendiri']):
@@ -718,21 +801,28 @@ with t4:
                                                marker_color=color, text=[f"{v:.0f}%" for v in ct2p[cat]], textposition='inside'))
                 fig2.update_layout(barmode='stack')
                 st.plotly_chart(style_fig(fig2, title="Bidang Minat × Gaya Kerja", h=300, legend_below=True), use_container_width=True)
-                ib(explain_stat(pb, vb, "Kesimpulan: bidang minat <b>tidak berkaitan kuat</b> dengan preferensi kerja sendiri/tim."))
+                if res2['warning']:
+                    st.markdown(f"<span class='small-note'>⚠ {res2['warning']}</span>", unsafe_allow_html=True)
+                ib(explain_stat(res2['p'], res2['v'], "Kesimpulan: bidang minat <b>tidak berkaitan kuat</b> dengan preferensi kerja sendiri/tim.", res2['test_name']))
 
     sh("Fasilitas & Skill Paling Diprioritaskan per Bidang")
     fas_rows = []
     for b in BIDANG_LIST:
         col_f = f'{b}__fasilitas'
         col_s = f'{b}__skill'
+        col_t = f'{b}__target'
         if col_f in df_f.columns:
             vc = df_f[col_f].value_counts()
             vc_s = df_f[col_s].value_counts() if col_s in df_f.columns else pd.Series(dtype=int)
+            vc_t = df_f[col_t].value_counts() if col_t in df_f.columns else pd.Series(dtype=int)
             if len(vc) > 0:
-                top_f = LABEL_FASILITAS_BIDANG.get(vc.index[0], shorten(vc.index[0], 50))
-                top_s = LABEL_SKILL_BIDANG.get(vc_s.index[0], shorten(vc_s.index[0], 50)) if len(vc_s) > 0 else "–"
-                fas_rows.append({'Bidang': b, 'Fasilitas paling diharapkan': top_f, '%': f"{vc.iloc[0]/vc.sum()*100:.0f}%",
-                                  'Skill paling dibutuhkan': top_s, 'n': vc.sum()})
+                top_f = LABEL_FASILITAS_BIDANG.get(vc.index[0], shorten(vc.index[0], 42))
+                top_s = LABEL_SKILL_BIDANG.get(vc_s.index[0], shorten(vc_s.index[0], 42)) if len(vc_s) > 0 else "–"
+                top_t = LABEL_TARGET_BIDANG.get(vc_t.index[0], shorten(vc_t.index[0], 42)) if len(vc_t) > 0 else "–"
+                fas_rows.append({'Bidang': b, 'n': vc.sum(),
+                                  'Target utama': top_t,
+                                  'Skill paling dibutuhkan': top_s,
+                                  'Fasilitas paling diharapkan': top_f, '%': f"{vc.iloc[0]/vc.sum()*100:.0f}%"})
     if fas_rows:
         st.dataframe(pd.DataFrame(fas_rows), use_container_width=True, hide_index=True)
 
@@ -958,19 +1048,28 @@ with t7:
         if len(sub_q) > 10:
             base_rate = {q: (sub_q[q] == 'Ya').mean() for q in q_labels}
             lift_matrix = np.full((8, 8), np.nan)
+            text_matrix = np.full((8, 8), "", dtype=object)
             for i, qa in enumerate(q_labels):
                 for j, qb in enumerate(q_labels):
                     if i == j:
                         continue
                     a_ya = sub_q[sub_q[qa] == 'Ya']
                     if len(a_ya) > 0 and base_rate[qb] > 0:
-                        lift_matrix[i, j] = (a_ya[qb] == 'Ya').mean() / base_rate[qb]
+                        lift_val = (a_ya[qb] == 'Ya').mean() / base_rate[qb]
+                        lift_matrix[i, j] = lift_val
+                        pair_ct = pd.crosstab(sub_q[qa], sub_q[qb])
+                        sig_mark = ""
+                        if pair_ct.shape == (2, 2):
+                            _, p_pair = fisher_exact(pair_ct.values)
+                            sig_mark = "*" if p_pair < 0.05 else ""
+                        text_matrix[i, j] = f"{lift_val:.2f}{sig_mark}"
             fig = go.Figure(data=go.Heatmap(
                 z=lift_matrix, x=short_labels, y=short_labels, colorscale='RdBu_r',
-                zmid=1, text=lift_matrix, texttemplate="%{text:.2f}"))
+                zmid=1, text=text_matrix, texttemplate="%{text}"))
             st.plotly_chart(style_fig(fig, h=460), use_container_width=True)
             st.caption("Q1: Analisis data · Q2: Paper ilmiah · Q3: Bisnis/tekno · Q4: Coding/AI · "
-                       "Q5: Ide bisnis · Q6: Pitching · Q7: Argumen persuasif · Q8: Diskusi sosial")
+                       "Q5: Ide bisnis · Q6: Pitching · Q7: Argumen persuasif · Q8: Diskusi sosial · "
+                       "* = signifikan secara statistik (Fisher's Exact Test, p<0,05)")
 
             flat = [(short_labels[i], short_labels[j], lift_matrix[i, j])
                     for i in range(8) for j in range(8) if i != j and not np.isnan(lift_matrix[i, j])]
@@ -979,12 +1078,13 @@ with t7:
             pct_up = (top_pair[2] - 1) * 100
             pct_down = (1 - low_pair[2]) * 100
             ib(f"<b>Cara baca lift:</b> angka 1,00 berarti dua minat itu independen (tidak saling terkait). "
-               f"Di atas 1 berarti saling memperkuat, di bawah 1 berarti saling melemahkan. Contoh: lift "
-               f"<b>{top_pair[0]}→{top_pair[1]} = {top_pair[2]:.2f}</b> artinya mahasiswa yang tertarik "
+               f"Di atas 1 berarti saling memperkuat, di bawah 1 berarti saling melemahkan. Tanda <b>*</b> "
+               f"berarti keterkaitannya sudah diuji signifikan secara statistik (bukan cuma kebetulan sampel) — "
+               f"<b>abaikan angka tanpa tanda *</b>, itu belum cukup bukti untuk disimpulkan sebagai pola nyata. "
+               f"Contoh: lift <b>{top_pair[0]}→{top_pair[1]} = {top_pair[2]:.2f}</b> artinya mahasiswa yang tertarik "
                f"{top_pair[0]} punya peluang <b>{pct_up:.0f}% lebih tinggi</b> dari rata-rata untuk juga "
                f"tertarik {top_pair[1]}. Sebaliknya, lift <b>{low_pair[0]}→{low_pair[1]} = {low_pair[2]:.2f}</b> "
-               f"artinya peluangnya <b>{pct_down:.0f}% lebih rendah</b> dari rata-rata — dua minat itu "
-               f"cenderung saling eksklusif.")
+               f"artinya peluangnya <b>{pct_down:.0f}% lebih rendah</b> dari rata-rata.")
 
     sh("Program Fasilitasi yang Paling Dikenal")
     if 'program_diketahui' in df_f:
