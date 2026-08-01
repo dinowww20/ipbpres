@@ -539,12 +539,11 @@ with t2:
     with d4:
         sh("Distribusi Angkatan")
         if 'angkatan' in df_f:
-            ac = df_f['angkatan'].value_counts().sort_index()
-            fig = go.Figure(go.Scatter(x=ac.index.astype(str), y=ac.values, mode='lines+markers+text',
-                                        text=ac.values, textposition='top center',
-                                        line=dict(color=ACCENT, width=3), marker=dict(size=10),
-                                        fill='tozeroy', fillcolor='rgba(15,110,86,0.15)'))
-            fig.update_layout(yaxis_range=[0, ac.max() * 1.25])
+            ac = df_f['angkatan'].value_counts().sort_index(ascending=False)
+            fig = px.bar(x=ac.index.astype(str), y=ac.values, text=ac.values,
+                         color=ac.values, color_continuous_scale='Purp')
+            fig.update_traces(textposition='outside')
+            fig.update_layout(coloraxis_showscale=False, xaxis_title="Angkatan", yaxis_title="Jumlah mahasiswa")
             st.plotly_chart(style_fig(fig, h=350), use_container_width=True)
 
     sh("Komunitas yang Pernah/Sedang Diikuti")
@@ -742,12 +741,12 @@ with t4:
 # ═══════════════════════════════════════════════════════
 with t5:
     sh("Preferensi Format Pembinaan")
-    label_metode = {
+    label_ukuran_kelompok = {
         'Kelompok Kecil (Hanya 1 tim/ maksimal 5 orang)': 'Kelompok kecil',
         '1 on 1 atau Personal (hanya diri sendiri)': 'Personal (1-on-1)',
         'Kelompok Besar (Pembinaan kelas seperti enrichment dsb.)': 'Kelompok besar',
     }
-    label_ukuran = {
+    label_aktivitas = {
         'Pendampingan dan Pembimbingan Personal (Mentoring/coaching dengan dosen/alumni/tokoh inspiratif)': 'Coaching personal',
         'Penguatan Relasi dan Keakraban(Sikrab/makrab, diskusi santai, dan studi kasus)': 'Relasi & keakraban',
         'Pelatihan Keterampilan dan Simulasi Lapangan (Simulasi lomba dan Praktik )': 'Simulasi & praktik',
@@ -757,6 +756,7 @@ with t5:
         'Pembinaan bebas (fleksibel) dan tidak terafiliasi dengan organisasi formal kampus, bisa diikuti tanpa komitmen keanggotaan atau struktur formal': 'Fleksibel',
         'Pembinaan terstruktur (terikat) dan diselenggarakan oleh pihak yang berafiliasi dengan organisasi formal kampus , dan biasanya memerlukan komitmen keikutsertaan': 'Terstruktur',
     }
+    label_metode_pelaksanaan = {'Hybrid': 'Hybrid', 'Luring': 'Luring', 'Daring': 'Daring'}
 
     def pct_series(col, lmap):
         if col not in df_f.columns:
@@ -764,13 +764,14 @@ with t5:
         s = df_f[col].dropna().map(lambda x: lmap.get(x, x)).value_counts()
         return (s / s.sum() * 100).round(0) if s.sum() > 0 else s
 
+    # Setiap baris dipasangkan dengan kolom & dictionary yang SESUAI isinya (tervalidasi ke data asli)
     rows_pref = {
-        'Ukuran kelompok': pct_series('metode_pembinaan', label_metode),
-        'Aktivitas ideal': pct_series('ukuran_kelompok', label_ukuran),
-        'Struktur pembinaan': pct_series('aktivitas_pembinaan', label_struktur),
+        'Metode pelaksanaan': pct_series('metode_pembinaan', label_metode_pelaksanaan),
+        'Ukuran kelompok': pct_series('ukuran_kelompok', label_ukuran_kelompok),
+        'Aktivitas ideal': pct_series('aktivitas_pembinaan', label_aktivitas),
+        'Struktur program': pct_series('struktur_program', label_struktur),
     }
     fig = go.Figure()
-    y_labels = list(rows_pref.keys())
     for row_name, series in rows_pref.items():
         left = 0
         for j, (cat, val) in enumerate(series.items()):
@@ -780,14 +781,16 @@ with t5:
                                   showlegend=False, base=left))
             left += val
     fig.update_layout(barmode='overlay', xaxis_range=[0, 100])
-    st.plotly_chart(style_fig(fig, h=320), use_container_width=True)
+    st.plotly_chart(style_fig(fig, h=360), use_container_width=True)
+    ib("Mayoritas menginginkan pembinaan <b>hybrid</b>, dalam <b>kelompok kecil</b>, berupa "
+       "<b>coaching personal</b> dengan dosen/alumni, dan format <b>fleksibel</b> tanpa keterikatan organisasi formal.")
 
     sh("Pola Preferensi Pembinaan per Bidang Minat")
-    if 'bidang_minat_utama' in df_f and 'metode_pembinaan' in df_f:
+    if 'bidang_minat_utama' in df_f and all(c in df_f for c in ['ukuran_kelompok', 'aktivitas_pembinaan', 'struktur_program']):
         sub = df_f[df_f['bidang_minat_utama'].isin(BIDANG_MAP_RAW.values())].copy()
-        sub['metode_short'] = sub['metode_pembinaan'].map(label_metode)
-        sub['ukuran_short'] = sub['ukuran_kelompok'].map(label_ukuran)
-        sub['struktur_short'] = sub['aktivitas_pembinaan'].map(label_struktur)
+        sub['ukuran_short'] = sub['ukuran_kelompok'].map(label_ukuran_kelompok)
+        sub['aktivitas_short'] = sub['aktivitas_pembinaan'].map(label_aktivitas)
+        sub['struktur_short'] = sub['struktur_program'].map(label_struktur)
 
         heat_rows = []
         for b_raw in sub['bidang_minat_utama'].unique():
@@ -795,8 +798,8 @@ with t5:
             n = len(g)
             heat_rows.append({
                 'Bidang': b_raw, 'n': n,
-                '% Kelompok kecil': (g['metode_short'] == 'Kelompok kecil').sum() / g['metode_short'].notna().sum() * 100 if g['metode_short'].notna().sum() else np.nan,
-                '% Coaching personal': (g['ukuran_short'] == 'Coaching personal').sum() / g['ukuran_short'].notna().sum() * 100 if g['ukuran_short'].notna().sum() else np.nan,
+                '% Kelompok kecil': (g['ukuran_short'] == 'Kelompok kecil').sum() / g['ukuran_short'].notna().sum() * 100 if g['ukuran_short'].notna().sum() else np.nan,
+                '% Coaching personal': (g['aktivitas_short'] == 'Coaching personal').sum() / g['aktivitas_short'].notna().sum() * 100 if g['aktivitas_short'].notna().sum() else np.nan,
                 '% Fleksibel': (g['struktur_short'] == 'Fleksibel').sum() / g['struktur_short'].notna().sum() * 100 if g['struktur_short'].notna().sum() else np.nan,
             })
         heat_df = pd.DataFrame(heat_rows).set_index('Bidang')
