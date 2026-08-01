@@ -660,8 +660,8 @@ with t4:
     sh("Proporsi Pernah Ikut Kompetisi per Bidang Minat")
     rows = []
     for b in BIDANG_LIST:
-        col = cmap.get(f'{b}__kompetisi')
-        if col and col in df.columns:
+        col = f'{b}__kompetisi'
+        if col in df_f.columns:
             s = df_f[col].dropna()
             n = len(s)
             ya = (s == 'Ya').sum()
@@ -723,11 +723,11 @@ with t4:
     sh("Fasilitas & Skill Paling Diprioritaskan per Bidang")
     fas_rows = []
     for b in BIDANG_LIST:
-        col_f = cmap.get(f'{b}__fasilitas')
-        col_s = cmap.get(f'{b}__skill')
-        if col_f and col_f in df.columns:
+        col_f = f'{b}__fasilitas'
+        col_s = f'{b}__skill'
+        if col_f in df_f.columns:
             vc = df_f[col_f].value_counts()
-            vc_s = df_f[col_s].value_counts() if col_s and col_s in df.columns else pd.Series(dtype=int)
+            vc_s = df_f[col_s].value_counts() if col_s in df_f.columns else pd.Series(dtype=int)
             if len(vc) > 0:
                 top_f = LABEL_FASILITAS_BIDANG.get(vc.index[0], shorten(vc.index[0], 50))
                 top_s = LABEL_SKILL_BIDANG.get(vc_s.index[0], shorten(vc_s.index[0], 50)) if len(vc_s) > 0 else "–"
