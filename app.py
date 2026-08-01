@@ -179,6 +179,31 @@ def explain_stat(p, v, context="", test_name="Chi-square"):
             f"{context}")
 
 
+def wilson_ci(k, n, z=1.96):
+    """Interval kepercayaan 95% (Wilson score) untuk proporsi — lebih akurat dari CI normal biasa
+    terutama saat n kecil (misal setelah filter diterapkan)."""
+    if n == 0:
+        return (np.nan, np.nan)
+    phat = k / n
+    denom = 1 + z**2 / n
+    center = phat + z**2 / (2 * n)
+    margin = z * np.sqrt(phat * (1 - phat) / n + z**2 / (4 * n**2))
+    lo = max(0, (center - margin) / denom) * 100
+    hi = min(1, (center + margin) / denom) * 100
+    return (lo, hi)
+
+
+def kpi_pct(label, k, n, extra=""):
+    """KPI card untuk proporsi, otomatis sertakan Wilson CI 95% supaya ketahuan ketidakpastiannya
+    saat sampel mengecil (misal setelah filter)."""
+    if n == 0:
+        kpi(label, "–", "data tidak tersedia")
+        return
+    pct = k / n * 100
+    lo, hi = wilson_ci(k, n)
+    kpi(label, f"{pct:.0f}%", f"n={n} · CI 95%: {lo:.0f}–{hi:.0f}%" + (f" · {extra}" if extra else ""))
+
+
 def run_assoc_test(ct):
     """
     Uji asosiasi 2 variabel kategorikal, otomatis pilih metode sesuai kaidah statistik:
@@ -535,23 +560,26 @@ t1, t2, t3, t4, t5, t6, t7 = st.tabs(
 with t1:
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        pct_cepat = (df_f['adaptasi_cepat'] == 'Ya').mean() * 100 if 'adaptasi_cepat' in df_f else None
-        kpi("Adaptasi cepat", f"{pct_cepat:.0f}%" if pct_cepat is not None else "–",
-            f"dari {df_f['adaptasi_cepat'].notna().sum()} yang menjawab" if 'adaptasi_cepat' in df_f else "")
+        k, n = (df_f['adaptasi_cepat'] == 'Ya').sum(), df_f['adaptasi_cepat'].notna().sum()
+        kpi_pct("Adaptasi cepat", k, n) if 'adaptasi_cepat' in df_f else kpi("Adaptasi cepat", "–")
+        pct_cepat = (k / n * 100) if n > 0 else None
     with c2:
-        pct_minat = (df_f['minat_lomba'] == 'Ya').mean() * 100 if 'minat_lomba' in df_f else None
-        kpi("Berminat kompetisi", f"{pct_minat:.0f}%" if pct_minat is not None else "–", "dari total responden")
+        k, n = (df_f['minat_lomba'] == 'Ya').sum(), df_f['minat_lomba'].notna().sum()
+        kpi_pct("Berminat kompetisi", k, n) if 'minat_lomba' in df_f else kpi("Berminat kompetisi", "–")
+        pct_minat = (k / n * 100) if n > 0 else None
     with c3:
-        pct_tim = (df_f['kerja_sendiri'] == 'Tidak').mean() * 100 if 'kerja_sendiri' in df_f else None
-        kpi("Prefer kerja tim", f"{pct_tim:.0f}%" if pct_tim is not None else "–", "vs kerja sendiri")
+        k, n = (df_f['kerja_sendiri'] == 'Tidak').sum(), df_f['kerja_sendiri'].notna().sum()
+        kpi_pct("Prefer kerja tim", k, n) if 'kerja_sendiri' in df_f else kpi("Prefer kerja tim", "–")
+        pct_tim = (k / n * 100) if n > 0 else None
     with c4:
-        pct_tahu = (df_f['pengetahuan_fasilitasi'] == 'Ya').mean() * 100 if 'pengetahuan_fasilitasi' in df_f else None
-        kpi("Tahu Fasilitasi Kompetitif", f"{pct_tahu:.0f}%" if pct_tahu is not None else "–", "minimal 1 program")
+        k, n = (df_f['pengetahuan_fasilitasi'] == 'Ya').sum(), df_f['pengetahuan_fasilitasi'].notna().sum()
+        kpi_pct("Tahu Fasilitasi Kompetitif", k, n) if 'pengetahuan_fasilitasi' in df_f else kpi("Tahu Fasilitasi", "–")
+        pct_tahu = (k / n * 100) if n > 0 else None
 
     ov1, ov2 = st.columns([1.3, 1])
     with ov1:
         sh("Profil Mahasiswa Selama Perkuliahan")
-        if 'profil_mhs' in df_f:
+        if 'profil_mhs' in df_f and df_f['profil_mhs'].notna().sum() > 0:
             pc = map_short(df_f['profil_mhs'], LABEL_PROFIL).value_counts().sort_values(ascending=True)
             fig = px.bar(pc, x=pc.values, y=pc.index, orientation='h', text=pc.values,
                          color=pc.values, color_continuous_scale='Teal')
@@ -559,8 +587,13 @@ with t1:
             fig.update_layout(coloraxis_showscale=False)
             st.plotly_chart(style_fig(fig, h=340), use_container_width=True)
             top = pc.idxmax()
-            ib(f"Profil dominan adalah <b>{top}</b> ({pc.max()} orang, {pc.max()/pc.sum()*100:.0f}%) — "
-               f"mayoritas mahasiswa mengejar keseimbangan antara akademik dan aktivitas non-akademik, bukan fokus tunggal.")
+            top_pct = pc.max() / pc.sum() * 100
+            lo, hi = wilson_ci(pc.max(), pc.sum())
+            runner_up = pc.sort_values(ascending=False).index[1] if len(pc) > 1 else None
+            gap_txt = f" — {top_pct - pc.sort_values(ascending=False).iloc[1]/pc.sum()*100:.0f} poin persentase di atas <b>{runner_up}</b> di posisi kedua" if runner_up else ""
+            ib(f"Pada data yang sedang ditampilkan (n={pc.sum()}), profil terbanyak adalah <b>{top}</b> "
+               f"({pc.max()} orang, {top_pct:.0f}%, CI 95%: {lo:.0f}–{hi:.0f}%){gap_txt}. "
+               f"<span class='small-note'>Hasil ini bisa berubah kalau filter di sidebar diubah — angka di atas mengikuti filter yang aktif saat ini.</span>")
     with ov2:
         sh("Snapshot Karakteristik")
         radar_vals = []
@@ -681,9 +714,14 @@ with t3:
                                   LABEL_ALASAN_CEPAT, LABEL_ALASAN_LAMBAT)
         if fig:
             st.plotly_chart(style_fig(fig, h=360, legend_below=True), use_container_width=True)
-            ib(f"<b>{n_ya}</b> mahasiswa ({n_ya/(n_ya+n_tidak)*100:.0f}%) cepat beradaptasi, "
-               f"didorong utamanya oleh fleksibilitas dan kemudahan belajar. Yang lambat beradaptasi "
-               f"({n_tidak} orang) paling sering terkendala rasa malu/canggung, bukan karena masalah teknis.")
+            ya_c, tidak_c = res
+            top_cepat, top_lambat = ya_c.idxmax(), tidak_c.idxmax()
+            lo, hi = wilson_ci(n_ya, n_ya + n_tidak)
+            ib(f"Pada data yang sedang ditampilkan: <b>{n_ya}</b> dari {n_ya+n_tidak} responden "
+               f"({n_ya/(n_ya+n_tidak)*100:.0f}%, CI 95%: {lo:.0f}–{hi:.0f}%) cepat beradaptasi. "
+               f"Alasan cepat yang paling sering disebut: <b>{top_cepat}</b> ({ya_c.max()} orang). "
+               f"Alasan lambat yang paling sering disebut: <b>{top_lambat}</b> ({tidak_c.max()} orang). "
+               f"<span class='small-note'>Angka & alasan teratas ini mengikuti filter aktif — bisa berubah kalau filter diganti.</span>")
 
     sh("Preferensi Kerja: Sendiri vs Tim")
     if all(k in df_f for k in ['kerja_sendiri', 'alasan_sendiri', 'alasan_tim']):
@@ -710,9 +748,17 @@ with t3:
         if fig2:
             st.plotly_chart(style_fig(fig2, h=360, legend_below=True), use_container_width=True)
             total = n_s + n_t
-            ib(f"Preferensi nyaris seimbang: {n_s} orang ({n_s/total*100:.0f}%) sendiri vs {n_t} orang "
-               f"({n_t/total*100:.0f}%) tim — bukan tren dominan ke satu arah. Ini penting untuk desain "
-               f"program pembinaan: sediakan opsi kelompok kecil <i>dan</i> jalur individual.")
+            pct_s = n_s / total * 100 if total > 0 else 0
+            gap = abs(pct_s - 50)
+            if gap < 8:
+                balance_txt = "nyaris seimbang, bukan tren dominan ke satu arah"
+            elif pct_s > 50:
+                balance_txt = f"condong ke <b>kerja sendiri</b> (selisih {gap:.0f} poin persentase dari 50:50)"
+            else:
+                balance_txt = f"condong ke <b>kerja tim</b> (selisih {gap:.0f} poin persentase dari 50:50)"
+            ib(f"Pada data yang sedang ditampilkan (n={total}): {n_s} orang ({pct_s:.0f}%) sendiri vs "
+               f"{n_t} orang ({100-pct_s:.0f}%) tim — {balance_txt}. "
+               f"<span class='small-note'>Proporsi ini bisa berbeda di subset data lain.</span>")
 
     sh("Minat Berkompetisi")
     if all(k in df_f for k in ['minat_lomba', 'alasan_minat']):
@@ -734,9 +780,13 @@ with t3:
                           color_discrete_sequence=[ACCENT])
             fig3.update_traces(textposition='outside')
             st.plotly_chart(style_fig(fig3, title=f"Alasan minat berkompetisi (n={n_minat})", h=380), use_container_width=True)
-            ib(f"<b>{n_minat}</b> dari {n_minat+n_tidak_minat} responden ({n_minat/(n_minat+n_tidak_minat)*100:.0f}%) "
-               f"berminat berkompetisi — dominan didorong pengalaman & tantangan baru, bukan sekadar CV. "
-               f"<span class='small-note'>Kelompok tidak berminat n={n_tidak_minat}, terlalu kecil untuk tren statistik, treat sebagai catatan kualitatif.</span>")
+            total_minat = n_minat + n_tidak_minat
+            top_alasan = minat_c.idxmax()
+            lo, hi = wilson_ci(n_minat, total_minat) if total_minat > 0 else (np.nan, np.nan)
+            ib(f"<b>{n_minat}</b> dari {total_minat} responden ({n_minat/total_minat*100:.0f}%, "
+               f"CI 95%: {lo:.0f}–{hi:.0f}%) berminat berkompetisi — alasan yang paling sering disebut: "
+               f"<b>{top_alasan}</b> ({minat_c.max()} orang, {minat_c.max()/n_minat*100:.0f}% dari yang berminat). "
+               f"<span class='small-note'>Kelompok tidak berminat n={n_tidak_minat} — terlalu kecil untuk tren statistik, dibaca sebagai catatan kualitatif saja.</span>")
 
 # ═══════════════════════════════════════════════════════
 # TAB 4 — PEMINATAN PRESTASI
@@ -872,8 +922,11 @@ with t5:
             left += val
     fig.update_layout(barmode='overlay', xaxis_range=[0, 100])
     st.plotly_chart(style_fig(fig, h=360), use_container_width=True)
-    ib("Mayoritas menginginkan pembinaan <b>hybrid</b>, dalam <b>kelompok kecil</b>, berupa "
-       "<b>coaching personal</b> dengan dosen/alumni, dan format <b>fleksibel</b> tanpa keterikatan organisasi formal.")
+    if all(len(s) > 0 for s in rows_pref.values()):
+        tops = [f"<b>{s.idxmax()}</b> ({s.max():.0f}%)" for s in rows_pref.values()]
+        ib(f"Pada data yang sedang ditampilkan, kombinasi paling diminati: {', '.join(tops[:-1])}, dan {tops[-1]} "
+           f"untuk struktur program. <span class='small-note'>Kategori teratas di tiap dimensi dihitung ulang "
+           f"otomatis sesuai filter yang aktif.</span>")
 
     sh("Pola Preferensi Pembinaan per Bidang Minat")
     if 'bidang_minat_utama' in df_f and all(c in df_f for c in ['ukuran_kelompok', 'aktivitas_pembinaan', 'struktur_program']):
@@ -950,9 +1003,12 @@ with t5:
         fig.update_traces(textposition='outside')
         fig.update_layout(coloraxis_showscale=False)
         st.plotly_chart(style_fig(fig, h=380), use_container_width=True)
-        ib("Multi-select (maksimal 3 pilihan per responden) — <b>rutin memberi arahan</b> dan "
-           "<b>fleksibel/terbuka diskusi</b> jadi dua kriteria paling banyak diminta, mengalahkan "
-           "faktor \"galak vs santai\" yang sering diasumsikan penting.")
+        if len(krc) >= 2:
+            top2 = krc.sort_values(ascending=False).index[:2].tolist()
+            n_resp = df_f['kriteria_mentor'].notna().sum()
+            ib(f"Multi-select (maksimal 3 pilihan per responden, n={n_resp}) — dua kriteria paling banyak "
+               f"dipilih pada data ini: <b>{top2[0]}</b> dan <b>{top2[1]}</b>. "
+               f"<span class='small-note'>Urutan ini dihitung ulang otomatis sesuai filter aktif.</span>")
 
 # ═══════════════════════════════════════════════════════
 # TAB 6 — FASILITASI KOMPETISI
@@ -987,6 +1043,7 @@ with t6:
     ib("Skala 1–4. Nilai di bawah 2,5 (garis abu-abu) menandakan area yang perlu diperbaiki lebih dulu.")
 
     f1, f2 = st.columns(2)
+    sc, mc = pd.Series(dtype=int), pd.Series(dtype=int)
     with f1:
         sh("Sumber Informasi Fasilitasi")
         if 'sumber_info' in df_f:
@@ -1007,8 +1064,14 @@ with t6:
             fig.update_traces(textposition='outside')
             fig.update_layout(coloraxis_showscale=False)
             st.plotly_chart(style_fig(fig, h=350), use_container_width=True)
-    ib("Instagram (feed & story) dan komunikasi grup angkatan mendominasi baik sebagai sumber info yang "
-       "sudah efektif maupun sebagai media yang paling disukai — konsisten, jadi prioritas jelas untuk promosi ke depan.")
+    if len(sc) > 0 and len(mc) > 0:
+        top_sc, top_mc = sc.idxmax(), mc.idxmax()
+        overlap_note = (f"Menariknya, sumber info paling efektif (<b>{top_sc}</b>) dan media paling disukai "
+                         f"(<b>{top_mc}</b>) adalah <b>hal yang sama</b> — sinyal kuat untuk fokus promosi ke sana.") \
+            if top_sc == top_mc else \
+            (f"Sumber info paling efektif saat ini: <b>{top_sc}</b>. Media yang paling disukai: <b>{top_mc}</b> "
+             f"— dua hal ini <b>berbeda</b>, artinya kanal yang sudah efektif belum tentu kanal favorit mahasiswa.")
+        ib(f"{overlap_note} <span class='small-note'>Dihitung ulang otomatis sesuai filter aktif.</span>")
 
     sh("Kendala & Evaluasi yang Diusulkan")
     e1, e2 = st.columns(2)
