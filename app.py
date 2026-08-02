@@ -164,6 +164,16 @@ def style_fig(fig, title=None, h=380, legend_below=False):
     fig.update_layout(**layout_kwargs)
     fig.update_xaxes(gridcolor=border_col, zerolinecolor=border_col, automargin=True)
     fig.update_yaxes(gridcolor=border_col, zerolinecolor=border_col, automargin=True)
+
+    # Paksa warna label angka 'outside' bar chart ikut tema aktif. Teks ini duduk di atas
+    # background transparan (kartu chart), jadi warnanya harus eksplisit ikut tema — beda
+    # dengan teks di pie/treemap yang duduk di atas warna slice/kotak sendiri (biarkan default
+    # Plotly yang otomatis kontras, supaya tidak malah jadi tidak kebaca di slice gelap).
+    for trace in fig.data:
+        if trace.type == 'bar':
+            pos = getattr(trace, 'textposition', None)
+            if pos == 'outside':
+                trace.update(textfont=dict(color=text_main))
     return fig
 
 
