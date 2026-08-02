@@ -122,6 +122,29 @@ def ib(text):
     st.markdown(f"<div class='insight-box'><p>{text}</p></div>", unsafe_allow_html=True)
 
 
+def hover_bar(fig, counts, unit="orang"):
+    """Hover kaya untuk bar chart horizontal berbasis counts series: tampilkan jumlah & % dari total n."""
+    total = counts.sum()
+    pct = (counts.values / total * 100) if total > 0 else counts.values * 0
+    fig.update_traces(customdata=pct,
+                       hovertemplate=f'<b>%{{y}}</b><br>Jumlah: %{{x}} {unit}<br>%{{customdata:.0f}}% dari total n={total}<extra></extra>')
+    return fig
+
+
+def hover_pie(fig, unit="orang"):
+    """Hover kaya untuk pie/donut chart: label, jumlah, persen, dan total n."""
+    total = int(sum(fig.data[0].values))
+    fig.update_traces(hovertemplate=f'<b>%{{label}}</b><br>Jumlah: %{{value}} {unit}<br>%{{percent}} dari total n={total}<extra></extra>')
+    return fig
+
+
+def hover_treemap(fig, unit="orang"):
+    """Hover kaya untuk treemap: label, jumlah, persen dari total (multi-select aware)."""
+    total = int(sum(fig.data[0].values))
+    fig.update_traces(hovertemplate=f'<b>%{{label}}</b><br>Jumlah: %{{value}} {unit}<br>%{{percentRoot}} dari total n={total}<extra></extra>')
+    return fig
+
+
 def kpi(label, value, sub=""):
     st.markdown(f"""<div class='kpi-card'><div class='kpi-label'>{label}</div>
     <div class='kpi-value'>{value}</div><div class='kpi-sub'>{sub}</div></div>""",
@@ -608,6 +631,7 @@ with t1:
                          color=pc.values, color_continuous_scale='Teal')
             fig.update_traces(textposition='outside')
             fig.update_layout(coloraxis_showscale=False)
+            hover_bar(fig, pc, "mahasiswa")
             st.plotly_chart(style_fig(fig, h=340), use_container_width=True)
             top = pc.idxmax()
             top_pct = pc.max() / pc.sum() * 100
@@ -630,7 +654,8 @@ with t1:
             fig_r.add_trace(go.Scatterpolar(r=radar_vals + [radar_vals[0]],
                                              theta=radar_labels + [radar_labels[0]],
                                              fill='toself', line_color=ACCENT, fillcolor=ACCENT,
-                                             opacity=0.75))
+                                             opacity=0.75,
+                                             hovertemplate='<b>%{theta}</b>: %{r:.0f}%<extra></extra>'))
             fig_r.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, 100], gridcolor=border_col)),
                                  showlegend=False)
             st.plotly_chart(style_fig(fig_r, h=340), use_container_width=True)
@@ -642,6 +667,7 @@ with t1:
         bc = bc[bc.index.isin(BIDANG_MAP_RAW.values())]
         fig = px.pie(values=bc.values, names=bc.index, hole=0.5, color_discrete_sequence=COLORWAY)
         fig.update_traces(textinfo='label+percent')
+        hover_pie(fig, "mahasiswa")
         st.plotly_chart(style_fig(fig, h=380), use_container_width=True)
 
 # ═══════════════════════════════════════════════════════
@@ -656,6 +682,7 @@ with t2:
             fig = px.pie(values=gc.values, names=gc.index, hole=0.5,
                          color_discrete_sequence=['#378ADD', '#85B7EB'])
             fig.update_traces(textinfo='label+percent+value')
+            hover_pie(fig, "mahasiswa")
             st.plotly_chart(style_fig(fig, h=350), use_container_width=True)
     with d2:
         sh("Tempat Tinggal")
@@ -664,6 +691,7 @@ with t2:
             fig = px.pie(values=tc.values, names=tc.index, hole=0.5,
                          color_discrete_sequence=['#0F6E56', '#5DCAA5', '#A8E0CB'])
             fig.update_traces(textinfo='label+percent+value')
+            hover_pie(fig, "mahasiswa")
             st.plotly_chart(style_fig(fig, h=350), use_container_width=True)
 
     d3, d4 = st.columns(2)
@@ -675,6 +703,7 @@ with t2:
                               color=jc.values, color_continuous_scale='Blues')
             fig.update_traces(textinfo='label+value+percent root', textfont_size=13)
             fig.update_layout(coloraxis_showscale=False)
+            hover_treemap(fig, "mahasiswa")
             st.plotly_chart(style_fig(fig, h=350), use_container_width=True)
     with d4:
         sh("Distribusi Angkatan")
@@ -682,7 +711,10 @@ with t2:
             ac = df_f['angkatan'].value_counts().sort_index(ascending=False)
             fig = px.bar(x=ac.index.astype(str), y=ac.values, text=ac.values,
                          color=ac.values, color_continuous_scale='Purp')
-            fig.update_traces(textposition='outside')
+            fig.update_traces(textposition='outside',
+                               hovertemplate=f'<b>Angkatan %{{x}}</b><br>Jumlah: %{{y}} mahasiswa<br>'
+                                             f'%{{customdata:.0f}}% dari total n={ac.sum()}<extra></extra>',
+                               customdata=(ac.values / ac.sum() * 100))
             fig.update_layout(coloraxis_showscale=False, xaxis_title="Angkatan", yaxis_title="Jumlah mahasiswa")
             st.plotly_chart(style_fig(fig, h=350), use_container_width=True)
 
@@ -691,9 +723,14 @@ with t2:
         ks = df_f['komunitas'].dropna().str.split(',').explode().str.strip()
         ks = map_short(ks, LABEL_KOMUNITAS)
         kc = ks.value_counts().sort_values(ascending=True)
+        n_responden_komunitas = df_f['komunitas'].notna().sum()
         fig = px.bar(kc, x=kc.values, y=kc.index, orientation='h', text=kc.values,
                      color=kc.values, color_continuous_scale='Greens')
-        fig.update_traces(textposition='outside')
+        fig.update_traces(textposition='outside',
+                           customdata=(kc.values / n_responden_komunitas * 100),
+                           hovertemplate=f'<b>%{{y}}</b><br>Jumlah: %{{x}} mahasiswa<br>'
+                                         f'%{{customdata:.0f}}% dari n={n_responden_komunitas} yang menjawab '
+                                         f'(multi-select)<extra></extra>')
         fig.update_layout(coloraxis_showscale=False)
         st.plotly_chart(style_fig(fig, h=380), use_container_width=True)
         ib("Multi-select — jumlah bisa melebihi n karena satu responden bisa mengikuti lebih dari satu komunitas.")
@@ -714,14 +751,21 @@ def tornado_chart(df_in, ya_col, alasan_ya_col, alasan_tidak_col, label_ya, labe
 
     ya_c = ya_c.sort_values(ascending=True)
     tidak_c = tidak_c.sort_values(ascending=True)
+    ya_total, tidak_total = ya_c.sum(), tidak_c.sum()
 
     fig = go.Figure()
     fig.add_trace(go.Bar(y=tidak_c.index, x=-tidak_c.values, orientation='h',
                           marker_color=color_tidak, name=label_tidak,
-                          text=tidak_c.values, textposition='outside'))
+                          text=tidak_c.values, textposition='outside',
+                          customdata=(tidak_c.values / tidak_total * 100) if tidak_total > 0 else tidak_c.values * 0,
+                          hovertemplate=f'<b>%{{y}}</b><br>Kelompok: {label_tidak}<br>Jumlah: %{{text}} orang<br>'
+                                        f'%{{customdata:.0f}}% dari kelompok ini (n={tidak_total})<extra></extra>'))
     fig.add_trace(go.Bar(y=ya_c.index, x=ya_c.values, orientation='h',
                           marker_color=color_ya, name=label_ya,
-                          text=ya_c.values, textposition='outside'))
+                          text=ya_c.values, textposition='outside',
+                          customdata=(ya_c.values / ya_total * 100) if ya_total > 0 else ya_c.values * 0,
+                          hovertemplate=f'<b>%{{y}}</b><br>Kelompok: {label_ya}<br>Jumlah: %{{text}} orang<br>'
+                                        f'%{{customdata:.0f}}% dari kelompok ini (n={ya_total})<extra></extra>'))
     fig.update_layout(barmode='overlay', title=title)
     return fig, (ya_c, tidak_c)
 
@@ -800,6 +844,7 @@ with t3:
             fig3 = px.bar(minat_c, x=minat_c.values, y=minat_c.index, orientation='h', text=minat_c.values,
                           color_discrete_sequence=[ACCENT])
             fig3.update_traces(textposition='outside')
+            hover_bar(fig3, minat_c, "orang")
             st.plotly_chart(style_fig(fig3, title=f"Alasan minat berkompetisi (n={n_minat})", h=380), use_container_width=True)
             total_minat = n_minat + n_tidak_minat
             top_alasan = minat_c.idxmax()
@@ -825,8 +870,11 @@ with t4:
         bidang_df = pd.DataFrame(rows).sort_values('pct')
         fig = px.scatter(bidang_df, x='pct', y='Bidang', size='n', color='pct',
                           color_continuous_scale='Teal', size_max=55,
-                          text=[f"{p:.0f}%" for p in bidang_df['pct']])
-        fig.update_traces(textposition='middle right', textfont_size=12)
+                          text=[f"{p:.0f}%" for p in bidang_df['pct']],
+                          custom_data=['Ya', 'n'])
+        fig.update_traces(textposition='middle right', textfont_size=12,
+                           hovertemplate='<b>%{y}</b><br>Pernah ikut kompetisi: %{customdata[0]} dari %{customdata[1]} '
+                                         'peminat bidang ini<br>Persentase: %{x:.0f}%<extra></extra>')
         fig.update_layout(xaxis_range=[0, 100], xaxis_title="% pernah ikut kompetisi", coloraxis_showscale=False)
         st.plotly_chart(style_fig(fig, h=330), use_container_width=True)
         ib("Ukuran lingkaran = jumlah responden (n) per bidang — bidang dengan lingkaran kecil "
@@ -846,11 +894,17 @@ with t4:
                 res = run_assoc_test(ct)
                 ctp = ct.div(ct.sum(axis=1), axis=0) * 100
                 ctp = ctp.loc[ctp.get('Ya', pd.Series(dtype=float)).sort_values(ascending=True).index] if 'Ya' in ctp else ctp
+                row_totals = ct.sum(axis=1)
                 fig = go.Figure()
                 for cat, color in zip(['Tidak', 'Ya'], [ACCENT2, ACCENT]):
                     if cat in ctp.columns:
-                        fig.add_trace(go.Bar(y=ctp.index, x=ctp[cat], orientation='h', name=cat,
-                                              marker_color=color, text=[f"{v:.0f}%" for v in ctp[cat]], textposition='inside'))
+                        counts_this = ct.loc[ctp.index, cat]
+                        fig.add_trace(go.Bar(
+                            y=ctp.index, x=ctp[cat], orientation='h', name=cat, marker_color=color,
+                            text=[f"{v:.0f}%" for v in ctp[cat]], textposition='inside',
+                            customdata=np.stack([counts_this.values, row_totals[ctp.index].values], axis=-1),
+                            hovertemplate=f'<b>%{{y}}</b><br>{cat}: %{{customdata[0]}} dari %{{customdata[1]}} orang '
+                                          f'(%{{x:.0f}}%)<extra></extra>'))
                 fig.update_layout(barmode='stack')
                 st.plotly_chart(style_fig(fig, title="Jalur Masuk × Kecepatan Adaptasi", h=300, legend_below=True), use_container_width=True)
                 if res['warning']:
@@ -865,11 +919,17 @@ with t4:
             if ct2.shape[0] > 1 and ct2.shape[1] > 1:
                 res2 = run_assoc_test(ct2)
                 ct2p = ct2.div(ct2.sum(axis=1), axis=0) * 100
+                row_totals2 = ct2.sum(axis=1)
                 fig2 = go.Figure()
                 for cat, color, lbl in zip(['Tidak', 'Ya'], ['#7F77DD', '#378ADD'], ['Lebih suka tim', 'Lebih suka sendiri']):
                     if cat in ct2p.columns:
-                        fig2.add_trace(go.Bar(y=ct2p.index, x=ct2p[cat], orientation='h', name=lbl,
-                                               marker_color=color, text=[f"{v:.0f}%" for v in ct2p[cat]], textposition='inside'))
+                        counts_this2 = ct2.loc[ct2p.index, cat]
+                        fig2.add_trace(go.Bar(
+                            y=ct2p.index, x=ct2p[cat], orientation='h', name=lbl, marker_color=color,
+                            text=[f"{v:.0f}%" for v in ct2p[cat]], textposition='inside',
+                            customdata=np.stack([counts_this2.values, row_totals2[ct2p.index].values], axis=-1),
+                            hovertemplate=f'<b>%{{y}}</b><br>{lbl}: %{{customdata[0]}} dari %{{customdata[1]}} orang '
+                                          f'(%{{x:.0f}}%)<extra></extra>'))
                 fig2.update_layout(barmode='stack')
                 st.plotly_chart(style_fig(fig2, title="Bidang Minat × Gaya Kerja", h=300, legend_below=True), use_container_width=True)
                 if res2['warning']:
@@ -922,25 +982,31 @@ with t5:
 
     def pct_series(col, lmap):
         if col not in df_f.columns:
-            return pd.Series(dtype=float)
+            return pd.Series(dtype=float), pd.Series(dtype=int), 0
         s = df_f[col].dropna().map(lambda x: lmap.get(x, x)).value_counts()
-        return (s / s.sum() * 100).round(0) if s.sum() > 0 else s
+        total = s.sum()
+        pct = (s / total * 100).round(0) if total > 0 else s
+        return pct, s, total
 
     # Setiap baris dipasangkan dengan kolom & dictionary yang SESUAI isinya (tervalidasi ke data asli)
-    rows_pref = {
+    rows_pref_raw = {
         'Metode pelaksanaan': pct_series('metode_pembinaan', label_metode_pelaksanaan),
         'Ukuran kelompok': pct_series('ukuran_kelompok', label_ukuran_kelompok),
         'Aktivitas ideal': pct_series('aktivitas_pembinaan', label_aktivitas),
         'Struktur program': pct_series('struktur_program', label_struktur),
     }
+    rows_pref = {k: v[0] for k, v in rows_pref_raw.items()}
     fig = go.Figure()
-    for row_name, series in rows_pref.items():
+    for row_name, (series, counts, total) in rows_pref_raw.items():
         left = 0
         for j, (cat, val) in enumerate(series.items()):
+            n_cat = counts.get(cat, 0)
             fig.add_trace(go.Bar(y=[row_name], x=[val], orientation='h', name=cat,
                                   marker_color=COLORWAY[j % len(COLORWAY)],
                                   text=f"{cat} {val:.0f}%", textposition='inside',
-                                  showlegend=False, base=left))
+                                  showlegend=False, base=left,
+                                  hovertemplate=f'<b>{row_name}</b><br>{cat}: {n_cat} dari {total} orang '
+                                                f'({val:.0f}%)<extra></extra>'))
             left += val
     fig.update_layout(barmode='overlay', xaxis_range=[0, 100])
     st.plotly_chart(style_fig(fig, h=360), use_container_width=True)
@@ -976,9 +1042,12 @@ with t5:
 
             hcol1, hcol2 = st.columns([1, 1])
             with hcol1:
+                n_matrix = np.tile(n_col.values.reshape(-1, 1), (1, heat_df.shape[1]))
                 fig_h = go.Figure(data=go.Heatmap(
                     z=heat_df.values, x=heat_df.columns, y=[f"{i} (n={n_col[i]})" for i in heat_df.index],
                     colorscale='Blues', text=heat_df.values, texttemplate="%{text:.0f}%",
+                    customdata=n_matrix,
+                    hovertemplate='<b>%{y}</b><br>%{x}: %{z:.0f}% (dari n=%{customdata:.0f} peminat bidang ini)<extra></extra>',
                     showscale=False))
                 st.plotly_chart(style_fig(fig_h, h=340), use_container_width=True)
             with hcol2:
@@ -986,10 +1055,13 @@ with t5:
                 theta = list(heat_df.columns) + [heat_df.columns[0]]
                 for i, (bidang, row) in enumerate(heat_df.iterrows()):
                     vals = list(row.values) + [row.values[0]]
-                    fig_radar.add_trace(go.Scatterpolar(r=vals, theta=theta, name=bidang,
-                                                          line_color=COLORWAY[i % len(COLORWAY)], opacity=0.85))
+                    n_bidang = n_col[bidang]
+                    fig_radar.add_trace(go.Scatterpolar(
+                        r=vals, theta=theta, name=f"{bidang} (n={n_bidang})",
+                        line_color=COLORWAY[i % len(COLORWAY)], opacity=0.85,
+                        hovertemplate=f'<b>{bidang}</b> (n={n_bidang})<br>%{{theta}}: %{{r:.0f}}%<extra></extra>'))
                 fig_radar.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, 100], gridcolor=border_col)),
-                                         legend=dict(orientation="h", yanchor="bottom", y=-0.35, xanchor="center", x=0.5, font=dict(size=10)))
+                                         legend=dict(orientation="h", yanchor="bottom", y=-0.35, xanchor="center", x=0.5, font=dict(size=9)))
                 st.plotly_chart(style_fig(fig_radar, h=340), use_container_width=True)
             ib("Heatmap dan radar menunjukkan data yang sama, dua sudut pandang berbeda: heatmap untuk baca "
                "angka presisi per sel, radar untuk lihat sekilas bidang mana yang \"bentuk preferensinya\" mirip satu sama lain.")
@@ -1005,12 +1077,14 @@ with t5:
                               color=tc.values, color_continuous_scale='Purp')
             fig.update_traces(textinfo='label+value', textfont_size=12)
             fig.update_layout(coloraxis_showscale=False)
+            hover_treemap(fig, "pilihan (multi-select)")
             st.plotly_chart(style_fig(fig, title="Tipe mentor yang diharapkan (multi-select)", h=350), use_container_width=True)
     with m2:
         if 'frekuensi_pembinaan' in df_f:
             fc = df_f['frekuensi_pembinaan'].map(normalize_frekuensi).dropna().value_counts()
             fig = px.pie(values=fc.values, names=fc.index, hole=0.5, color_discrete_sequence=COLORWAY)
             fig.update_traces(textinfo='label+percent')
+            hover_pie(fig, "orang")
             st.plotly_chart(style_fig(fig, title="Frekuensi pembinaan ideal per bulan", h=350), use_container_width=True)
 
     sh("Kriteria Mentor \"Ideal\" Menurut Mahasiswa")
@@ -1027,6 +1101,7 @@ with t5:
                      color=krc.values, color_continuous_scale='Purp')
         fig.update_traces(textposition='outside')
         fig.update_layout(coloraxis_showscale=False)
+        hover_bar(fig, krc, "pilihan (multi-select)")
         st.plotly_chart(style_fig(fig, h=380), use_container_width=True)
         if len(krc) >= 2:
             top2 = krc.sort_values(ascending=False).index[:2].tolist()
@@ -1082,6 +1157,7 @@ with t6:
                          color=sc.values, color_continuous_scale='Teal')
             fig.update_traces(textposition='outside')
             fig.update_layout(coloraxis_showscale=False)
+            hover_bar(fig, sc, "pilihan (multi-select)")
             st.plotly_chart(style_fig(fig, h=350), use_container_width=True)
     with f2:
         sh("Media Promosi yang Disukai")
@@ -1092,6 +1168,7 @@ with t6:
                          color=mc.values, color_continuous_scale='Blues')
             fig.update_traces(textposition='outside')
             fig.update_layout(coloraxis_showscale=False)
+            hover_bar(fig, mc, "pilihan (multi-select)")
             st.plotly_chart(style_fig(fig, h=350), use_container_width=True)
     if len(sc) > 0 and len(mc) > 0:
         top_sc, top_mc = sc.idxmax(), mc.idxmax()
@@ -1113,6 +1190,7 @@ with t6:
                          color=kc.values, color_continuous_scale='Oranges')
             fig.update_traces(textposition='outside')
             fig.update_layout(coloraxis_showscale=False)
+            hover_bar(fig, kc, "responden")
             st.plotly_chart(style_fig(fig, title="Kendala utama", h=360), use_container_width=True)
     with e2:
         if 'evaluasi' in df_f:
@@ -1123,6 +1201,7 @@ with t6:
                          color=ec.values, color_continuous_scale='Purp')
             fig.update_traces(textposition='outside')
             fig.update_layout(coloraxis_showscale=False)
+            hover_bar(fig, ec, "responden")
             st.plotly_chart(style_fig(fig, title="Evaluasi yang diusulkan", h=360), use_container_width=True)
 
 # ═══════════════════════════════════════════════════════
@@ -1158,9 +1237,20 @@ with t7:
                                 sig_mark = "*"
                                 sig_matrix[i, j] = True
                         text_matrix[i, j] = f"{lift_val:.2f}{sig_mark}"
+            full_names = {'Q1': 'Analisis data', 'Q2': 'Paper ilmiah', 'Q3': 'Bisnis/teknologi',
+                          'Q4': 'Coding/AI', 'Q5': 'Ide bisnis', 'Q6': 'Pitching',
+                          'Q7': 'Argumen persuasif', 'Q8': 'Diskusi sosial'}
+            sig_text = np.where(sig_matrix, 'Signifikan (p<0,05)', 'Tidak signifikan — abaikan')
+            custom = np.empty((8, 8, 3), dtype=object)
+            for i in range(8):
+                for j in range(8):
+                    custom[i, j] = [sig_text[i, j], full_names[short_labels[i]], full_names[short_labels[j]]]
             fig = go.Figure(data=go.Heatmap(
                 z=lift_matrix, x=short_labels, y=short_labels, colorscale='RdBu_r',
-                zmid=1, text=text_matrix, texttemplate="%{text}"))
+                zmid=1, text=text_matrix, texttemplate="%{text}", customdata=custom,
+                hovertemplate='Kalau tertarik <b>%{customdata[1]} (%{y})</b>, peluang tertarik '
+                              '<b>%{customdata[2]} (%{x})</b> = %{z:.2f}x lipat rata-rata mahasiswa lain'
+                              '<br>Status: %{customdata[0]}<extra></extra>'))
             st.plotly_chart(style_fig(fig, h=460), use_container_width=True)
             st.caption("Q1: Analisis data · Q2: Paper ilmiah · Q3: Bisnis/tekno · Q4: Coding/AI · "
                        "Q5: Ide bisnis · Q6: Pitching · Q7: Argumen persuasif · Q8: Diskusi sosial · "
@@ -1204,6 +1294,7 @@ with t7:
                           color=pdc.values, color_continuous_scale='Greens')
         fig.update_traces(textinfo='label+value+percent root', textfont_size=13)
         fig.update_layout(coloraxis_showscale=False)
+        hover_treemap(fig, "mahasiswa yang tahu")
         st.plotly_chart(style_fig(fig, h=320), use_container_width=True)
 
     sh("Wordcloud Saran Mahasiswa")
@@ -1230,9 +1321,14 @@ with t7:
             top_words = Counter(words).most_common(10)
             if top_words:
                 wdf = pd.DataFrame(top_words, columns=['Kata', 'Frekuensi']).sort_values('Frekuensi')
+                total_kata = len(words)
                 fig_w = px.bar(wdf, x='Frekuensi', y='Kata', orientation='h', color='Frekuensi',
                                color_continuous_scale='Greens')
                 fig_w.update_layout(coloraxis_showscale=False)
+                fig_w.update_traces(
+                    customdata=(wdf['Frekuensi'].values / total_kata * 100),
+                    hovertemplate=f'<b>%{{y}}</b><br>Muncul %{{x}} kali<br>'
+                                  f'%{{customdata:.1f}}% dari total {total_kata} kata (setelah stopword difilter)<extra></extra>')
                 st.plotly_chart(style_fig(fig_w, title="Top 10 kata", h=380), use_container_width=True)
     elif not WC_OK:
         st.info("Package `wordcloud` belum terpasang — cek requirements.txt.")
