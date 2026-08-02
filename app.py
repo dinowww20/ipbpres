@@ -210,9 +210,18 @@ def run_assoc_test(ct):
     - Tabel 2x2 dengan sel kecil -> Fisher's Exact Test (lebih valid untuk n kecil)
     - Tabel lain -> Chi-square, dengan pengecekan aturan Cochran (maks 20% sel expected count <5,
       tidak ada sel expected count <1). Kalau dilanggar, hasil ditandai caveat eksplisit.
-    Mengembalikan dict: {test_name, p, v, valid, warning}
+    Mengembalikan dict: {test_name, p, v, valid, warning}. Aman untuk tabel degenerate
+    (baris/kolom bertotal nol akibat filter) — mengembalikan valid=False alih-alih crash.
     """
-    chi2, p_chi, dof, expected = chi2_contingency(ct)
+    ct = ct.loc[ct.sum(axis=1) > 0, ct.sum(axis=0) > 0]  # buang baris/kolom kosong akibat filter
+    if ct.shape[0] < 2 or ct.shape[1] < 2:
+        return {'test_name': None, 'p': np.nan, 'v': np.nan, 'valid': False,
+                'warning': "Tidak cukup variasi kategori pada filter ini untuk diuji (butuh minimal 2×2)."}
+    try:
+        chi2, p_chi, dof, expected = chi2_contingency(ct)
+    except ValueError:
+        return {'test_name': None, 'p': np.nan, 'v': np.nan, 'valid': False,
+                'warning': "Tabel tidak valid untuk diuji pada kombinasi filter ini."}
     nobs = ct.sum().sum()
     v = np.sqrt(chi2 / (nobs * (min(ct.shape) - 1))) if min(ct.shape) > 1 else np.nan
 
@@ -222,13 +231,13 @@ def run_assoc_test(ct):
 
     if ct.shape == (2, 2) and cochran_violated:
         _, p_fisher = fisher_exact(ct.values)
-        return {'test_name': "Fisher's Exact Test", 'p': p_fisher, 'v': v,
+        return {'test_name': "Fisher's Exact Test", 'p': p_fisher, 'v': v, 'valid': True,
                 'warning': "Tabel 2×2 dengan sel kecil — dipakai Fisher's Exact Test (lebih akurat dari chi-square untuk n kecil), bukan chi-square biasa."}
     elif cochran_violated:
-        return {'test_name': "Chi-square", 'p': p_chi, 'v': v,
+        return {'test_name': "Chi-square", 'p': p_chi, 'v': v, 'valid': True,
                 'warning': f"Peringatan: {pct_low:.0f}% sel punya expected count di bawah 5 (aturan Cochran dilanggar) — hasil chi-square ini kurang reliabel, baca sebagai indikasi awal saja."}
     else:
-        return {'test_name': "Chi-square", 'p': p_chi, 'v': v, 'warning': None}
+        return {'test_name': "Chi-square", 'p': p_chi, 'v': v, 'valid': True, 'warning': None}
 
 
 # ═══════════════════════════════════════════════════════
@@ -525,10 +534,20 @@ def normalize_frekuensi(x):
 # ═══════════════════════════════════════════════════════
 with st.sidebar:
     st.markdown("---")
-    st.markdown("### Filter data")
+    st.markdown("### 🔍 Filter Data")
     f_gender = st.multiselect("Jenis kelamin", options=sorted(df['gender'].dropna().unique()) if 'gender' in df else [])
     f_jalur = st.multiselect("Jalur masuk", options=sorted(df['jalur_masuk'].dropna().unique()) if 'jalur_masuk' in df else [])
     f_bidang = st.multiselect("Bidang minat utama", options=BIDANG_LIST)
+    with st.expander("Filter tambahan"):
+        f_angkatan = st.multiselect("Angkatan", options=sorted(df['angkatan'].dropna().unique()) if 'angkatan' in df else [])
+        komunitas_opts_map = {}  # short_label -> set of raw_label yang mewakilinya
+        if 'komunitas' in df:
+            for raw_val in df['komunitas'].dropna().str.split(',').explode().str.strip().unique():
+                short_val = LABEL_KOMUNITAS.get(raw_val, shorten(raw_val))
+                komunitas_opts_map.setdefault(short_val, set()).add(raw_val)
+        f_komunitas = st.multiselect("Komunitas", options=sorted(komunitas_opts_map.keys()))
+    if st.button("↺ Reset semua filter", use_container_width=True):
+        st.rerun()
 
 df_f = df.copy()
 if f_gender and 'gender' in df_f:
@@ -538,21 +557,36 @@ if f_jalur and 'jalur_masuk' in df_f:
 if f_bidang and 'bidang_minat_utama' in df_f:
     raw_vals = [BIDANG_MAP_RAW[b] for b in f_bidang]
     df_f = df_f[df_f['bidang_minat_utama'].isin(raw_vals)]
+if f_angkatan and 'angkatan' in df_f:
+    df_f = df_f[df_f['angkatan'].isin(f_angkatan)]
+if f_komunitas and 'komunitas' in df_f:
+    raw_targets = set().union(*[komunitas_opts_map[k] for k in f_komunitas])
+    df_f = df_f[df_f['komunitas'].fillna('').apply(
+        lambda x: any(s.strip() in raw_targets for s in x.split(',')))]
 
 N = len(df_f)
+active_filters = sum([bool(f_gender), bool(f_jalur), bool(f_bidang), bool(f_angkatan), bool(f_komunitas)])
 
 # ═══════════════════════════════════════════════════════
 # HEADER
 # ═══════════════════════════════════════════════════════
+filter_badge = f" · <b>{active_filters} filter aktif</b>" if active_filters > 0 else ""
 st.markdown(f"""<div class='dash-header' style='display:flex; justify-content:space-between; align-items:center;'>
 <div><div class='title'>Dashboard Analisis Survey Prestasi</div>
 <div class='subtitle'>IPB University — Fasilitasi Kompetitif Mahasiswa · Purposive sampling, 4 Feb–21 Mar 2026</div></div>
-<div class='meta'>n = <b>{N}</b> responden{" (terfilter)" if N != len(df) else f" dari {len(df)}"}<br>Skala kepuasan 1–4</div>
+<div class='meta'>n = <b>{N}</b> responden{" (terfilter)" if N != len(df) else f" dari {len(df)}"}{filter_badge}<br>Skala kepuasan 1–4</div>
 </div>""", unsafe_allow_html=True)
 
+if 0 < N < 20:
+    st.warning(f"⚠ Filter aktif menyisakan hanya **{N} responden**. Angka dan uji statistik di bawah "
+               f"jadi sangat tidak stabil pada n sekecil ini — baca semuanya sebagai indikasi kasar, bukan kesimpulan.")
+elif N == 0:
+    st.error("Kombinasi filter ini tidak menghasilkan responden sama sekali. Coba longgarkan filter di sidebar.")
+    st.stop()
+
 t1, t2, t3, t4, t5, t6, t7 = st.tabs(
-    ["Overview", "Demografi", "Karakteristik", "Peminatan Prestasi",
-     "Pola Pembinaan", "Fasilitasi Kompetisi", "Insight Teks"])
+    ["📊 Overview", "👥 Demografi", "🧭 Karakteristik", "🏆 Peminatan Prestasi",
+     "🎯 Pola Pembinaan", "📢 Fasilitasi Kompetisi", "💬 Insight Teks"])
 
 # ═══════════════════════════════════════════════════════
 # TAB 1 — OVERVIEW
@@ -835,7 +869,8 @@ with t4:
                 st.plotly_chart(style_fig(fig, title="Jalur Masuk × Kecepatan Adaptasi", h=300, legend_below=True), use_container_width=True)
                 if res['warning']:
                     st.markdown(f"<span class='small-note'>⚠ {res['warning']}</span>", unsafe_allow_html=True)
-                ib(explain_stat(res['p'], res['v'], "Kesimpulan: jalur masuk mahasiswa <b>tidak berkaitan</b> dengan cepat-tidaknya beradaptasi.", res['test_name']))
+                if res['valid']:
+                    ib(explain_stat(res['p'], res['v'], "Kesimpulan: jalur masuk mahasiswa <b>tidak berkaitan</b> dengan cepat-tidaknya beradaptasi.", res['test_name']))
 
     with cb:
         if all(k in df_f for k in ['bidang_minat_utama', 'kerja_sendiri']):
@@ -853,7 +888,8 @@ with t4:
                 st.plotly_chart(style_fig(fig2, title="Bidang Minat × Gaya Kerja", h=300, legend_below=True), use_container_width=True)
                 if res2['warning']:
                     st.markdown(f"<span class='small-note'>⚠ {res2['warning']}</span>", unsafe_allow_html=True)
-                ib(explain_stat(res2['p'], res2['v'], "Kesimpulan: bidang minat <b>tidak berkaitan kuat</b> dengan preferensi kerja sendiri/tim.", res2['test_name']))
+                if res2['valid']:
+                    ib(explain_stat(res2['p'], res2['v'], "Kesimpulan: bidang minat <b>tidak berkaitan kuat</b> dengan preferensi kerja sendiri/tim.", res2['test_name']))
 
     sh("Fasilitas & Skill Paling Diprioritaskan per Bidang")
     fas_rows = []
@@ -945,29 +981,32 @@ with t5:
                 '% Coaching personal': (g['aktivitas_short'] == 'Coaching personal').sum() / g['aktivitas_short'].notna().sum() * 100 if g['aktivitas_short'].notna().sum() else np.nan,
                 '% Fleksibel': (g['struktur_short'] == 'Fleksibel').sum() / g['struktur_short'].notna().sum() * 100 if g['struktur_short'].notna().sum() else np.nan,
             })
-        heat_df = pd.DataFrame(heat_rows).set_index('Bidang')
-        n_col = heat_df.pop('n')
-        heat_df = heat_df.round(0)
+        if not heat_rows:
+            st.info("Tidak ada data bidang minat pada kombinasi filter ini.")
+        else:
+            heat_df = pd.DataFrame(heat_rows).set_index('Bidang')
+            n_col = heat_df.pop('n')
+            heat_df = heat_df.round(0)
 
-        hcol1, hcol2 = st.columns([1, 1])
-        with hcol1:
-            fig_h = go.Figure(data=go.Heatmap(
-                z=heat_df.values, x=heat_df.columns, y=[f"{i} (n={n_col[i]})" for i in heat_df.index],
-                colorscale='Blues', text=heat_df.values, texttemplate="%{text:.0f}%",
-                showscale=False))
-            st.plotly_chart(style_fig(fig_h, h=340), use_container_width=True)
-        with hcol2:
-            fig_radar = go.Figure()
-            theta = list(heat_df.columns) + [heat_df.columns[0]]
-            for i, (bidang, row) in enumerate(heat_df.iterrows()):
-                vals = list(row.values) + [row.values[0]]
-                fig_radar.add_trace(go.Scatterpolar(r=vals, theta=theta, name=bidang,
-                                                      line_color=COLORWAY[i % len(COLORWAY)], opacity=0.85))
-            fig_radar.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, 100], gridcolor=border_col)),
-                                     legend=dict(orientation="h", yanchor="bottom", y=-0.35, xanchor="center", x=0.5, font=dict(size=10)))
-            st.plotly_chart(style_fig(fig_radar, h=340), use_container_width=True)
-        ib("Heatmap dan radar menunjukkan data yang sama, dua sudut pandang berbeda: heatmap untuk baca "
-           "angka presisi per sel, radar untuk lihat sekilas bidang mana yang \"bentuk preferensinya\" mirip satu sama lain.")
+            hcol1, hcol2 = st.columns([1, 1])
+            with hcol1:
+                fig_h = go.Figure(data=go.Heatmap(
+                    z=heat_df.values, x=heat_df.columns, y=[f"{i} (n={n_col[i]})" for i in heat_df.index],
+                    colorscale='Blues', text=heat_df.values, texttemplate="%{text:.0f}%",
+                    showscale=False))
+                st.plotly_chart(style_fig(fig_h, h=340), use_container_width=True)
+            with hcol2:
+                fig_radar = go.Figure()
+                theta = list(heat_df.columns) + [heat_df.columns[0]]
+                for i, (bidang, row) in enumerate(heat_df.iterrows()):
+                    vals = list(row.values) + [row.values[0]]
+                    fig_radar.add_trace(go.Scatterpolar(r=vals, theta=theta, name=bidang,
+                                                          line_color=COLORWAY[i % len(COLORWAY)], opacity=0.85))
+                fig_radar.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, 100], gridcolor=border_col)),
+                                         legend=dict(orientation="h", yanchor="bottom", y=-0.35, xanchor="center", x=0.5, font=dict(size=10)))
+                st.plotly_chart(style_fig(fig_radar, h=340), use_container_width=True)
+            ib("Heatmap dan radar menunjukkan data yang sama, dua sudut pandang berbeda: heatmap untuk baca "
+               "angka presisi per sel, radar untuk lihat sekilas bidang mana yang \"bentuk preferensinya\" mirip satu sama lain.")
 
     sh("Peran & Tipe Mentor")
     m1, m2 = st.columns(2)
@@ -1032,14 +1071,18 @@ with t6:
     for col_key, label, container in gauge_data:
         with container:
             if col_key in df_f:
-                val = df_f[col_key].dropna().astype(float).mean()
-                fig = go.Figure(go.Indicator(
-                    mode="gauge+number", value=val, number={'suffix': "/4", 'font': {'size': 24}},
-                    gauge={'axis': {'range': [0, 4], 'tickwidth': 1},
-                           'bar': {'color': ACCENT if val >= 2.5 else ACCENT2},
-                           'steps': [{'range': [0, 2], 'color': hover_bg}, {'range': [2, 4], 'color': bg_panel}],
-                           'threshold': {'line': {'color': text_muted, 'width': 2}, 'value': 2.5}}))
-                st.plotly_chart(style_fig(fig, title=label, h=220), use_container_width=True)
+                vals_notna = df_f[col_key].dropna().astype(float)
+                if len(vals_notna) > 0:
+                    val = vals_notna.mean()
+                    fig = go.Figure(go.Indicator(
+                        mode="gauge+number", value=val, number={'suffix': "/4", 'font': {'size': 24}},
+                        gauge={'axis': {'range': [0, 4], 'tickwidth': 1},
+                               'bar': {'color': ACCENT if val >= 2.5 else ACCENT2},
+                               'steps': [{'range': [0, 2], 'color': hover_bg}, {'range': [2, 4], 'color': bg_panel}],
+                               'threshold': {'line': {'color': text_muted, 'width': 2}, 'value': 2.5}}))
+                    st.plotly_chart(style_fig(fig, title=f"{label} (n={len(vals_notna)})", h=220), use_container_width=True)
+                else:
+                    st.info(f"{label}: tidak ada data pada filter ini.")
     ib("Skala 1–4. Nilai di bawah 2,5 (garis abu-abu) menandakan area yang perlu diperbaiki lebih dulu.")
 
     f1, f2 = st.columns(2)
