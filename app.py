@@ -35,7 +35,7 @@ if theme_mode == "Dark":
     chart_template = "plotly_dark"
 else:
     bg_app, bg_panel = "#F8FAFC", "#FFFFFF"
-    text_main, text_muted = "#1E293B", "#64748B"
+    text_main, text_muted = "#000000", "#374151"
     border_col, hover_bg = "#E2E8F0", "#ECFDF5"
     chart_template = "plotly_white"
 
@@ -81,9 +81,9 @@ span[data-baseweb="tag"] span {{ color: {ACCENT} !important; }}
 /* ── Tabs ── */
 .stTabs [data-baseweb="tab-list"] {{ background-color: {bg_panel} !important; border-radius: 14px; padding: 6px; gap: 4px; border: 1px solid {border_col} !important; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }}
 .stTabs button[role="tab"] {{ background: transparent !important; border-radius: 10px; padding: 10px 16px; font-weight: 600; font-size: 13px !important; transition: all .15s ease; }}
-.stTabs button[role="tab"] p {{ color: {text_muted} !important; }}
+.stTabs button[role="tab"] * {{ color: {text_muted} !important; }}
 .stTabs button[aria-selected="true"] {{ background: linear-gradient(135deg, {ACCENT}, #14876B) !important; box-shadow: 0 3px 8px rgba(15,110,86,0.3); }}
-.stTabs button[aria-selected="true"] p {{ color: white !important; font-weight: 700 !important; }}
+.stTabs button[aria-selected="true"] * {{ color: white !important; font-weight: 700 !important; }}
 
 /* ── KPI cards ── */
 .kpi-card {{ background: {bg_panel}; border: 1px solid {border_col}; border-left: 4px solid {ACCENT};
