@@ -158,12 +158,14 @@ def map_short(series, label_dict, fallback_n=44):
 
 
 def explain_stat(p, v, context="", test_name="Chi-square"):
-    """Kotak penjelasan awam untuk uji asosiasi & Cramér's V, dengan angka aktual."""
+    """Kotak penjelasan awam untuk uji asosiasi & Cramér's V, dengan angka aktual.
+    Bahasa sengaja dijaga supaya tidak menyiratkan generalisasi ke populasi
+    (data ini purposive sampling, bukan random sampling)."""
     sig = p < 0.05
-    p_txt = (f"karena p-value = <b>{p:.3f}</b> (di bawah 0,05), secara statistik pola ini "
-             f"<b>cukup meyakinkan bukan kebetulan acak</b>") if sig else \
-            (f"karena p-value = <b>{p:.3f}</b> (di atas 0,05), pola beda-tidaknya "
-             f"<b>bisa jadi cuma kebetulan sebaran sampel</b>, bukan pola yang benar-benar nyata")
+    p_txt = (f"karena p-value = <b>{p:.3f}</b> (di bawah 0,05), pola bedanya cukup besar untuk "
+             f"dibilang <b>bukan sekadar kebetulan pengelompokan dalam 297 responden ini</b>") if sig else \
+            (f"karena p-value = <b>{p:.3f}</b> (di atas 0,05), pola beda-tidaknya <b>tidak bisa dibedakan "
+             f"dari kebetulan pengelompokan acak dalam sampel ini</b>")
     if v < 0.1:
         v_txt = "praktis tidak ada keterkaitan"
     elif v < 0.2:
@@ -172,36 +174,23 @@ def explain_stat(p, v, context="", test_name="Chi-square"):
         v_txt = "keterkaitannya lemah-sedang"
     else:
         v_txt = "keterkaitannya cukup kuat"
-    return (f"<b>Cara baca ({test_name}):</b> p-value mengukur seberapa besar kemungkinan pola ini muncul "
-            f"cuma karena kebetulan acak — semakin kecil p-value (di bawah 0,05), semakin "
-            f"meyakinkan bahwa pola itu nyata. Di sini {p_txt}. Cramér's V (0–1) mengukur "
-            f"<i>seberapa kuat</i> keterkaitannya — nilai <b>{v:.2f}</b> berarti {v_txt}. "
+    return (f"<b>Cara baca ({test_name}):</b> p-value di sini mengukur apakah pola beda yang terlihat di "
+            f"<i>data yang sedang ditampilkan</i> lebih besar dari yang wajar terjadi karena kebetulan "
+            f"pengelompokan sampel — <b>bukan</b> peluang pola ini benar di seluruh populasi mahasiswa IPB "
+            f"(sampelnya purposive, bukan acak, jadi generalisasi populasi tidak bisa diklaim dari uji ini). "
+            f"Di sini {p_txt}. Cramér's V (0–1) mengukur <i>seberapa kuat</i> keterkaitannya — ukuran ini "
+            f"valid terlepas dari metode sampling — nilai <b>{v:.2f}</b> berarti {v_txt}. "
             f"{context}")
 
 
-def wilson_ci(k, n, z=1.96):
-    """Interval kepercayaan 95% (Wilson score) untuk proporsi — lebih akurat dari CI normal biasa
-    terutama saat n kecil (misal setelah filter diterapkan)."""
-    if n == 0:
-        return (np.nan, np.nan)
-    phat = k / n
-    denom = 1 + z**2 / n
-    center = phat + z**2 / (2 * n)
-    margin = z * np.sqrt(phat * (1 - phat) / n + z**2 / (4 * n**2))
-    lo = max(0, (center - margin) / denom) * 100
-    hi = min(1, (center + margin) / denom) * 100
-    return (lo, hi)
-
-
 def kpi_pct(label, k, n, extra=""):
-    """KPI card untuk proporsi, otomatis sertakan Wilson CI 95% supaya ketahuan ketidakpastiannya
-    saat sampel mengecil (misal setelah filter)."""
+    """KPI card untuk proporsi. Cuma tampilkan n mentah (bukan interval kepercayaan) —
+    karena sampling purposive tidak memenuhi syarat untuk klaim CI formal ke populasi."""
     if n == 0:
         kpi(label, "–", "data tidak tersedia")
         return
     pct = k / n * 100
-    lo, hi = wilson_ci(k, n)
-    kpi(label, f"{pct:.0f}%", f"n={n} · CI 95%: {lo:.0f}–{hi:.0f}%" + (f" · {extra}" if extra else ""))
+    kpi(label, f"{pct:.0f}%", f"n={n}" + (f" · {extra}" if extra else ""))
 
 
 def run_assoc_test(ct):
@@ -622,11 +611,10 @@ with t1:
             st.plotly_chart(style_fig(fig, h=340), use_container_width=True)
             top = pc.idxmax()
             top_pct = pc.max() / pc.sum() * 100
-            lo, hi = wilson_ci(pc.max(), pc.sum())
             runner_up = pc.sort_values(ascending=False).index[1] if len(pc) > 1 else None
             gap_txt = f" — {top_pct - pc.sort_values(ascending=False).iloc[1]/pc.sum()*100:.0f} poin persentase di atas <b>{runner_up}</b> di posisi kedua" if runner_up else ""
             ib(f"Pada data yang sedang ditampilkan (n={pc.sum()}), profil terbanyak adalah <b>{top}</b> "
-               f"({pc.max()} orang, {top_pct:.0f}%, CI 95%: {lo:.0f}–{hi:.0f}%){gap_txt}. "
+               f"({pc.max()} orang, {top_pct:.0f}%){gap_txt}. "
                f"<span class='small-note'>Hasil ini bisa berubah kalau filter di sidebar diubah — angka di atas mengikuti filter yang aktif saat ini.</span>")
     with ov2:
         sh("Snapshot Karakteristik")
@@ -750,9 +738,8 @@ with t3:
             st.plotly_chart(style_fig(fig, h=360, legend_below=True), use_container_width=True)
             ya_c, tidak_c = res
             top_cepat, top_lambat = ya_c.idxmax(), tidak_c.idxmax()
-            lo, hi = wilson_ci(n_ya, n_ya + n_tidak)
             ib(f"Pada data yang sedang ditampilkan: <b>{n_ya}</b> dari {n_ya+n_tidak} responden "
-               f"({n_ya/(n_ya+n_tidak)*100:.0f}%, CI 95%: {lo:.0f}–{hi:.0f}%) cepat beradaptasi. "
+               f"({n_ya/(n_ya+n_tidak)*100:.0f}%) cepat beradaptasi. "
                f"Alasan cepat yang paling sering disebut: <b>{top_cepat}</b> ({ya_c.max()} orang). "
                f"Alasan lambat yang paling sering disebut: <b>{top_lambat}</b> ({tidak_c.max()} orang). "
                f"<span class='small-note'>Angka & alasan teratas ini mengikuti filter aktif — bisa berubah kalau filter diganti.</span>")
@@ -816,9 +803,8 @@ with t3:
             st.plotly_chart(style_fig(fig3, title=f"Alasan minat berkompetisi (n={n_minat})", h=380), use_container_width=True)
             total_minat = n_minat + n_tidak_minat
             top_alasan = minat_c.idxmax()
-            lo, hi = wilson_ci(n_minat, total_minat) if total_minat > 0 else (np.nan, np.nan)
-            ib(f"<b>{n_minat}</b> dari {total_minat} responden ({n_minat/total_minat*100:.0f}%, "
-               f"CI 95%: {lo:.0f}–{hi:.0f}%) berminat berkompetisi — alasan yang paling sering disebut: "
+            ib(f"<b>{n_minat}</b> dari {total_minat} responden ({n_minat/total_minat*100:.0f}%) "
+               f"berminat berkompetisi — alasan yang paling sering disebut: "
                f"<b>{top_alasan}</b> ({minat_c.max()} orang, {minat_c.max()/n_minat*100:.0f}% dari yang berminat). "
                f"<span class='small-note'>Kelompok tidak berminat n={n_tidak_minat} — terlalu kecil untuk tren statistik, dibaca sebagai catatan kualitatif saja.</span>")
 
@@ -1154,6 +1140,7 @@ with t7:
         if len(sub_q) > 10:
             base_rate = {q: (sub_q[q] == 'Ya').mean() for q in q_labels}
             lift_matrix = np.full((8, 8), np.nan)
+            sig_matrix = np.full((8, 8), False)
             text_matrix = np.full((8, 8), "", dtype=object)
             for i, qa in enumerate(q_labels):
                 for j, qb in enumerate(q_labels):
@@ -1167,7 +1154,9 @@ with t7:
                         sig_mark = ""
                         if pair_ct.shape == (2, 2):
                             _, p_pair = fisher_exact(pair_ct.values)
-                            sig_mark = "*" if p_pair < 0.05 else ""
+                            if p_pair < 0.05:
+                                sig_mark = "*"
+                                sig_matrix[i, j] = True
                         text_matrix[i, j] = f"{lift_val:.2f}{sig_mark}"
             fig = go.Figure(data=go.Heatmap(
                 z=lift_matrix, x=short_labels, y=short_labels, colorscale='RdBu_r',
@@ -1175,22 +1164,31 @@ with t7:
             st.plotly_chart(style_fig(fig, h=460), use_container_width=True)
             st.caption("Q1: Analisis data · Q2: Paper ilmiah · Q3: Bisnis/tekno · Q4: Coding/AI · "
                        "Q5: Ide bisnis · Q6: Pitching · Q7: Argumen persuasif · Q8: Diskusi sosial · "
-                       "* = signifikan secara statistik (Fisher's Exact Test, p<0,05)")
+                       "* = signifikan secara statistik (Fisher's Exact Test, p<0,05, dalam sampel ini)")
 
-            flat = [(short_labels[i], short_labels[j], lift_matrix[i, j])
-                    for i in range(8) for j in range(8) if i != j and not np.isnan(lift_matrix[i, j])]
-            top_pair = max(flat, key=lambda x: x[2])
-            low_pair = min(flat, key=lambda x: x[2])
-            pct_up = (top_pair[2] - 1) * 100
-            pct_down = (1 - low_pair[2]) * 100
-            ib(f"<b>Cara baca lift:</b> angka 1,00 berarti dua minat itu independen (tidak saling terkait). "
-               f"Di atas 1 berarti saling memperkuat, di bawah 1 berarti saling melemahkan. Tanda <b>*</b> "
-               f"berarti keterkaitannya sudah diuji signifikan secara statistik (bukan cuma kebetulan sampel) — "
-               f"<b>abaikan angka tanpa tanda *</b>, itu belum cukup bukti untuk disimpulkan sebagai pola nyata. "
-               f"Contoh: lift <b>{top_pair[0]}→{top_pair[1]} = {top_pair[2]:.2f}</b> artinya mahasiswa yang tertarik "
-               f"{top_pair[0]} punya peluang <b>{pct_up:.0f}% lebih tinggi</b> dari rata-rata untuk juga "
-               f"tertarik {top_pair[1]}. Sebaliknya, lift <b>{low_pair[0]}→{low_pair[1]} = {low_pair[2]:.2f}</b> "
-               f"artinya peluangnya <b>{pct_down:.0f}% lebih rendah</b> dari rata-rata.")
+            # Contoh HANYA diambil dari pasangan yang signifikan — supaya tidak kontradiksi dengan
+            # anjuran "abaikan angka tanpa tanda *" di bawah.
+            flat_sig = [(short_labels[i], short_labels[j], lift_matrix[i, j])
+                        for i in range(8) for j in range(8) if i != j and sig_matrix[i, j]]
+            base_txt = (f"<b>Cara baca lift:</b> angka 1,00 berarti dua minat itu independen (tidak saling terkait "
+                        f"dalam sampel ini). Di atas 1 berarti saling memperkuat, di bawah 1 saling melemahkan. "
+                        f"Tanda <b>*</b> berarti sudah diuji signifikan (Fisher's Exact, p<0,05) — "
+                        f"<b>angka tanpa tanda * sebaiknya diabaikan</b>, belum cukup bukti buat disimpulkan sebagai pola.")
+            if flat_sig:
+                top_pair = max(flat_sig, key=lambda x: x[2])
+                low_pair = min(flat_sig, key=lambda x: x[2])
+                pct_up = (top_pair[2] - 1) * 100
+                pct_down = (1 - low_pair[2]) * 100
+                example_txt = (f" Contoh dari pasangan yang <i>signifikan</i>: lift <b>{top_pair[0]}→{top_pair[1]} "
+                                f"= {top_pair[2]:.2f}*</b> — mahasiswa yang tertarik {top_pair[0]} punya peluang "
+                                f"<b>{pct_up:.0f}% lebih tinggi</b> dari rata-rata untuk juga tertarik {top_pair[1]}.")
+                if low_pair[2] < 1:
+                    example_txt += (f" Sebaliknya, lift <b>{low_pair[0]}→{low_pair[1]} = {low_pair[2]:.2f}*</b> "
+                                     f"artinya peluangnya <b>{pct_down:.0f}% lebih rendah</b> dari rata-rata.")
+                ib(base_txt + example_txt)
+            else:
+                ib(base_txt + " Pada data yang sedang ditampilkan, <b>tidak ada pasangan minat yang lolos uji "
+                   "signifikansi</b> — belum ada bukti cukup kuat untuk pola keterkaitan antar minat di sini.")
 
     sh("Program Fasilitasi yang Paling Dikenal")
     if 'program_diketahui' in df_f:
