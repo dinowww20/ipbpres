@@ -152,18 +152,22 @@ def kpi(label, value, sub=""):
 
 
 def style_fig(fig, title=None, h=380, legend_below=False):
+    legend_cfg = dict(orientation="h", yanchor="bottom", y=-0.3, xanchor="center", x=0.5,
+                       font=dict(color=text_main)) if legend_below else dict(font=dict(color=text_main))
     layout_kwargs = dict(
         template=chart_template, height=h,
         paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
         font=dict(family="Inter", color=text_main, size=12.5),
         margin=dict(l=20, r=40, t=45 if title else 15, b=20),
-        legend=dict(orientation="h", yanchor="bottom", y=-0.3, xanchor="center", x=0.5) if legend_below else {},
+        legend=legend_cfg,
     )
     if title:
-        layout_kwargs['title'] = dict(text=title, font=dict(size=14.5))
+        layout_kwargs['title'] = dict(text=title, font=dict(size=14.5, color=text_main))
     fig.update_layout(**layout_kwargs)
-    fig.update_xaxes(gridcolor=border_col, zerolinecolor=border_col, automargin=True)
-    fig.update_yaxes(gridcolor=border_col, zerolinecolor=border_col, automargin=True)
+    fig.update_xaxes(gridcolor=border_col, zerolinecolor=border_col, automargin=True,
+                      tickfont=dict(color=text_main), title_font=dict(color=text_main))
+    fig.update_yaxes(gridcolor=border_col, zerolinecolor=border_col, automargin=True,
+                      tickfont=dict(color=text_main), title_font=dict(color=text_main))
 
     # Paksa warna label angka 'outside' bar chart ikut tema aktif. Teks ini duduk di atas
     # background transparan (kartu chart), jadi warnanya harus eksplisit ikut tema — beda
