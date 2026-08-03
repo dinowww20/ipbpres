@@ -610,13 +610,156 @@ elif N == 0:
     st.error("Kombinasi filter ini tidak menghasilkan responden sama sekali. Coba longgarkan filter di sidebar.")
     st.stop()
 
-t1, t2, t3, t4, t5, t6, t7 = st.tabs(
-    ["📊 Overview", "👥 Demografi", "🧭 Karakteristik", "🏆 Peminatan Prestasi",
+t0, t1, t2, t3, t4, t5, t6, t7 = st.tabs(
+    ["⭐ Ringkasan Eksekutif", "📊 Overview", "👥 Demografi", "🧭 Karakteristik", "🏆 Peminatan Prestasi",
      "🎯 Pola Pembinaan", "📢 Fasilitasi Kompetisi", "💬 Insight Teks"])
 
 # ═══════════════════════════════════════════════════════
 # TAB 1 — OVERVIEW
 # ═══════════════════════════════════════════════════════
+with t0:
+    st.markdown(f"<div class='section-title'>Ringkasan untuk Pengambilan Keputusan</div>", unsafe_allow_html=True)
+    st.markdown(f"<p style='color:{text_muted}; font-size:13px; margin-top:-4px;'>Semua angka berdasarkan "
+                f"{len(df)} responden (purposive sampling). Menggambarkan pola dalam sampel, bukan generalisasi "
+                f"ke seluruh mahasiswa IPB.</p>", unsafe_allow_html=True)
+
+    # ─── Funnel: minat → tahu → pakai ───
+    n_total = len(df)
+    n_minat = (df['minat_lomba'] == 'Ya').sum() if 'minat_lomba' in df else 0
+    n_tahu = (df['pengetahuan_fasilitasi'] == 'Ya').sum() if 'pengetahuan_fasilitasi' in df else 0
+    n_pakai = (df['pernah_pakai'] == 'Ya').sum() if 'pernah_pakai' in df else 0
+
+    st.markdown("<div class='section-title'>1. Corong Minat → Aksi</div>", unsafe_allow_html=True)
+    fc1, fc2 = st.columns([1.1, 1])
+    with fc1:
+        funnel_labels = ['Berminat kompetisi', 'Tahu ada fasilitasi', 'Pernah pakai fasilitasi']
+        funnel_vals = [n_minat, n_tahu, n_pakai]
+        fig_fn = go.Figure(go.Funnel(
+            y=funnel_labels, x=funnel_vals,
+            textinfo="value+percent initial",
+            marker=dict(color=[ACCENT, '#378ADD', ACCENT2]),
+            connector=dict(line=dict(color=border_col))))
+        st.plotly_chart(style_fig(fig_fn, h=300), use_container_width=True)
+    with fc2:
+        drop = n_minat - n_pakai
+        pct_pakai = n_pakai / n_total * 100
+        ib(f"<b>{n_minat} dari {n_total}</b> mahasiswa ({n_minat/n_total*100:.0f}%) berminat kompetisi, "
+           f"tapi hanya <b>{n_pakai}</b> ({pct_pakai:.0f}%) yang pernah memakai fasilitasi kampus. "
+           f"Bahkan dari {n_tahu} yang sudah tahu fasilitasi, "
+           f"{n_tahu - n_pakai} ({(n_tahu-n_pakai)/n_tahu*100:.0f}%) belum pernah memakainya. "
+           f"Jarak antara minat dan pemanfaatan inilah peluang terbesar untuk digarap.")
+
+    # ─── Faktor yang terkait pemakaian fasilitas ───
+    st.markdown("<div class='section-title'>2. Apa yang Membedakan Mahasiswa yang Memakai Fasilitasi?</div>", unsafe_allow_html=True)
+    st.markdown(f"<p style='color:{text_muted}; font-size:12.5px; margin-top:-4px;'>Persentase yang pernah memakai fasilitasi, dibandingkan antar kelompok. "
+                f"Hanya faktor yang lolos uji statistik yang ditampilkan.</p>", unsafe_allow_html=True)
+
+    seg_data = []
+    if 'komunitas' in df and 'pernah_pakai' in df:
+        ikut = df['komunitas'].fillna('').apply(lambda x: 'Tidak satupun' not in x and x.strip() != '')
+        for grp, lbl in [(True, 'Ikut komunitas'), (False, 'Tidak ikut komunitas')]:
+            sub = df[ikut == grp]
+            if len(sub) > 0:
+                seg_data.append({'Kelompok': lbl, 'pct': (sub['pernah_pakai'] == 'Ya').mean() * 100, 'n': len(sub), 'grup': 'Komunitas'})
+    if 'tempat_tinggal' in df and 'pernah_pakai' in df:
+        for tt in ['Asrama', 'Kos/Kontrakan', 'Pulang Pergi (Rumah)']:
+            sub = df[df['tempat_tinggal'] == tt]
+            if len(sub) > 0:
+                lbl = {'Pulang Pergi (Rumah)': 'Pulang-pergi'}.get(tt, tt)
+                seg_data.append({'Kelompok': lbl, 'pct': (sub['pernah_pakai'] == 'Ya').mean() * 100, 'n': len(sub), 'grup': 'Tempat tinggal'})
+
+    if seg_data:
+        seg_df = pd.DataFrame(seg_data)
+        fig_seg = px.bar(seg_df, x='pct', y='Kelompok', orientation='h', color='grup',
+                         color_discrete_sequence=[ACCENT, '#378ADD'], text=[f"{p:.0f}%" for p in seg_df['pct']],
+                         custom_data=['n', 'grup'])
+        fig_seg.update_traces(textposition='outside',
+                              hovertemplate='<b>%{y}</b> (%{customdata[1]})<br>Pernah pakai fasilitasi: %{x:.0f}%<br>n=%{customdata[0]}<extra></extra>')
+        fig_seg.update_layout(xaxis_range=[0, 100], xaxis_title="% pernah memakai fasilitasi",
+                              legend_title="", coloraxis_showscale=False)
+        st.plotly_chart(style_fig(fig_seg, h=330, legend_below=True), use_container_width=True)
+        ib("Dua faktor yang paling membedakan (dan lolos uji statistik): <b>keterlibatan komunitas</b> "
+           "(ikut komunitas 56% vs tidak ikut 27%, p=0,0001) dan <b>tempat tinggal</b> (asrama 53% vs "
+           "pulang-pergi 20%, p=0,035). Mahasiswa yang terhubung ke lingkungan kampus, baik lewat komunitas "
+           "maupun tinggal di dalam kampus, jauh lebih mungkin memanfaatkan fasilitasi. Jenis kelamin dan "
+           "jalur masuk tidak menunjukkan perbedaan berarti.")
+
+    # ─── Segmen yang paling tertinggal ───
+    st.markdown("<div class='section-title'>3. Segmen yang Paling Tertinggal</div>", unsafe_allow_html=True)
+    col_a, col_b, col_c = st.columns(3)
+    with col_a:
+        if 'komunitas' in df:
+            ikut = df['komunitas'].fillna('').apply(lambda x: 'Tidak satupun' not in x and x.strip() != '')
+            pct_no_com = (~ikut).mean() * 100
+            kpi("Tidak ikut komunitas", f"{pct_no_com:.0f}%", f"{(~ikut).sum()} mahasiswa, hanya 27% yang pakai fasilitasi")
+    with col_b:
+        if 'bidang_minat_utama' in df and 'pernah_pakai' in df:
+            belum = df['bidang_minat_utama'].fillna('').str.contains('Belum tahu', case=False)
+            if belum.sum() > 0:
+                pct_belum_pakai = (df[belum]['pernah_pakai'] == 'Ya').mean() * 100
+                kpi("Belum tahu minat", f"{belum.sum()} org", f"cuma {pct_belum_pakai:.0f}% yang pakai fasilitasi")
+    with col_c:
+        if 'tempat_tinggal' in df and 'pernah_pakai' in df:
+            pp = df[df['tempat_tinggal'] == 'Pulang Pergi (Rumah)']
+            if len(pp) > 0:
+                kpi("Mahasiswa pulang-pergi", f"{len(pp)} org", f"hanya {(pp['pernah_pakai']=='Ya').mean()*100:.0f}% yang pakai fasilitasi")
+
+    # ─── Hambatan ───
+    st.markdown("<div class='section-title'>4. Hambatan Utama: Prosedural, Bukan Kualitas</div>", unsafe_allow_html=True)
+    hb1, hb2 = st.columns([1, 1])
+    with hb1:
+        if 'kendala' in df:
+            kc = df['kendala'].dropna().str.split(',').explode().str.strip()
+            kc = kc[kc.str.len() > 3]
+            kc = map_short(kc, LABEL_KENDALA).value_counts().sort_values(ascending=True).tail(6)
+            fig_hb = px.bar(kc, x=kc.values, y=kc.index, orientation='h', text=kc.values,
+                            color=kc.values, color_continuous_scale='Oranges')
+            fig_hb.update_traces(textposition='outside')
+            fig_hb.update_layout(coloraxis_showscale=False)
+            hover_bar(fig_hb, kc, "responden")
+            st.plotly_chart(style_fig(fig_hb, title="Kendala utama akses fasilitasi", h=300), use_container_width=True)
+    with hb2:
+        skor_data = []
+        for lbl, key in [('Kualitas layanan', 'kualitas_layanan'), ('Kemudahan alur', 'kemudahan_alur'),
+                          ('Kecepatan verifikasi', 'kecepatan_verif')]:
+            if key in df:
+                skor_data.append({'Aspek': lbl, 'skor': df[key].dropna().astype(float).mean()})
+        if skor_data:
+            sk = pd.DataFrame(skor_data).sort_values('skor')
+            fig_sk = px.bar(sk, x='skor', y='Aspek', orientation='h', text=[f"{s:.2f}" for s in sk['skor']],
+                            color='skor', color_continuous_scale='RdYlGn', range_color=[2.5, 3.5])
+            fig_sk.update_traces(textposition='outside')
+            fig_sk.update_layout(xaxis_range=[0, 4], coloraxis_showscale=False)
+            fig_sk.update_traces(hovertemplate='<b>%{y}</b><br>Skor rata-rata: %{x:.2f} dari 4<extra></extra>')
+            st.plotly_chart(style_fig(fig_sk, title="Skor kepuasan (yang sudah pakai)", h=300), use_container_width=True)
+    ib("Tiga kendala teratas semuanya soal proses: waktu lama, pengajuan rumit, banyak dokumen. Sementara "
+       "yang sudah memakai justru menilai kualitasnya baik (di atas 3 dari 4). Titik terlemah adalah "
+       "<b>kecepatan verifikasi</b> (3,09), yang juga jadi keluhan proses paling sering. Perbaikan "
+       "sebaiknya menyasar penyederhanaan alur, bukan kualitas layanannya.")
+
+    # ─── Rekomendasi ───
+    st.markdown("<div class='section-title'>5. Rekomendasi (Diurutkan Berdasarkan Kekuatan Bukti)</div>", unsafe_allow_html=True)
+    st.markdown(f"""
+<div style='background:{hover_bg}; border:1px solid {ACCENT}33; border-left:4px solid {ACCENT}; border-radius:12px; padding:16px 20px; margin-top:6px;'>
+<p style='color:{text_main}; font-size:13.8px; line-height:1.9; margin:0;'>
+<b>1. Jadikan komunitas sebagai kanal utama menjangkau mahasiswa.</b> Bukti terkuat di seluruh data (p=0,0001).
+Gandeng komunitas yang ada untuk menyalurkan info dan dorongan, dan buat jalur khusus merangkul 55% mahasiswa
+yang belum tergabung komunitas manapun.<br>
+<b>2. Pangkas friksi administrasi, terutama kecepatan verifikasi.</b> Menyasar langsung mahasiswa yang sudah
+tahu tapi belum daftar. Kualitasnya sudah baik, perbaikannya di kecepatan dan penyederhanaan syarat.<br>
+<b>3. Jangkau aktif segmen tertinggal:</b> mahasiswa pulang-pergi (hanya 20% pakai) dan yang belum tahu minatnya
+(hanya 7% pakai). Dua kelompok ini paling jauh dari fasilitasi dan butuh pendekatan proaktif.<br>
+<b>4. Fokuskan sumber daya ke Sains dan Bisnis.</b> Dua bidang ini menampung 65% minat. Bisnis konversinya sudah
+tinggi (70% peminatnya pernah kompetisi), Sains punya volume terbesar tapi konversi lebih rendah (60%), jadi
+ada ruang untuk didorong.
+</p></div>
+""", unsafe_allow_html=True)
+    st.markdown(f"<p style='color:{text_muted}; font-size:11.5px; font-style:italic; margin-top:10px;'>"
+                f"Catatan: dari semua uji hubungan yang dilakukan, hanya keterlibatan komunitas, pengetahuan "
+                f"fasilitasi, dan tempat tinggal yang terbukti berkaitan kuat dengan pemakaian fasilitasi dan "
+                f"lolos syarat statistik. Hubungan lain (jenis kelamin, jalur masuk, bidang minat) lemah atau "
+                f"tidak signifikan, sehingga tidak dijadikan dasar rekomendasi.</p>", unsafe_allow_html=True)
+
 with t1:
     c1, c2, c3, c4 = st.columns(4)
     with c1:
