@@ -81,9 +81,16 @@ span[data-baseweb="tag"] span {{ color: {ACCENT} !important; }}
 /* ── Tabs ── */
 .stTabs [data-baseweb="tab-list"] {{ background-color: {bg_panel} !important; border-radius: 14px; padding: 6px; gap: 4px; border: 1px solid {border_col} !important; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }}
 .stTabs button[role="tab"] {{ background: transparent !important; border-radius: 10px; padding: 10px 16px; font-weight: 600; font-size: 13px !important; transition: all .15s ease; }}
-.stTabs button[role="tab"] * {{ color: {text_muted} !important; }}
-.stTabs button[aria-selected="true"] {{ background: linear-gradient(135deg, {ACCENT}, #14876B) !important; box-shadow: 0 3px 8px rgba(15,110,86,0.3); }}
-.stTabs button[aria-selected="true"] * {{ color: white !important; font-weight: 700 !important; }}
+.stTabs button[role="tab"], .stTabs [data-baseweb="tab"],
+.stTabs button[role="tab"] *, .stTabs [data-baseweb="tab"] * {{
+    color: {text_muted} !important; -webkit-text-fill-color: {text_muted} !important;
+}}
+.stTabs button[aria-selected="true"], .stTabs [aria-selected="true"][data-baseweb="tab"] {{
+    background: linear-gradient(135deg, {ACCENT}, #14876B) !important; box-shadow: 0 3px 8px rgba(15,110,86,0.3);
+}}
+.stTabs button[aria-selected="true"] *, .stTabs [aria-selected="true"][data-baseweb="tab"] * {{
+    color: white !important; -webkit-text-fill-color: white !important; font-weight: 700 !important;
+}}
 
 /* ── KPI cards ── */
 .kpi-card {{ background: {bg_panel}; border: 1px solid {border_col}; border-left: 4px solid {ACCENT};
@@ -679,11 +686,34 @@ with t0:
         fig_seg.update_layout(xaxis_range=[0, 100], xaxis_title="% pernah memakai fasilitasi",
                               legend_title="", coloraxis_showscale=False)
         st.plotly_chart(style_fig(fig_seg, h=330, legend_below=True), use_container_width=True)
-        ib("Dua faktor yang paling membedakan (dan lolos uji statistik): <b>keterlibatan komunitas</b> "
-           "(ikut komunitas 56% vs tidak ikut 27%, p=0,0001) dan <b>tempat tinggal</b> (asrama 53% vs "
-           "pulang-pergi 20%, p=0,035). Mahasiswa yang terhubung ke lingkungan kampus, baik lewat komunitas "
-           "maupun tinggal di dalam kampus, jauh lebih mungkin memanfaatkan fasilitasi. Jenis kelamin dan "
-           "jalur masuk tidak menunjukkan perbedaan berarti.")
+
+        # Hitung ulang uji statistik LIVE dari data yang sedang difilter — bukan angka hardcoded,
+        # supaya p-value selalu sinkron dengan persentase yang ditampilkan di atas.
+        stat_parts = []
+        if 'komunitas' in df_f and 'pernah_pakai' in df_f:
+            ct_kom = pd.crosstab(ikut, df_f['pernah_pakai'])
+            res_kom = run_assoc_test(ct_kom)
+            if res_kom['valid']:
+                kom_pct = {lbl: seg_df[seg_df['Kelompok'] == lbl]['pct'].values for lbl in ['Ikut komunitas', 'Tidak ikut komunitas']}
+                if len(kom_pct['Ikut komunitas']) and len(kom_pct['Tidak ikut komunitas']):
+                    stat_parts.append(f"<b>keterlibatan komunitas</b> (ikut komunitas {kom_pct['Ikut komunitas'][0]:.0f}% vs "
+                                       f"tidak ikut {kom_pct['Tidak ikut komunitas'][0]:.0f}%, p={res_kom['p']:.4f})")
+        if 'tempat_tinggal' in df_f and 'pernah_pakai' in df_f:
+            ct_tt = pd.crosstab(df_f['tempat_tinggal'], df_f['pernah_pakai'])
+            res_tt = run_assoc_test(ct_tt)
+            if res_tt['valid']:
+                tt_pct = {lbl: seg_df[seg_df['Kelompok'] == lbl]['pct'].values for lbl in ['Asrama', 'Pulang-pergi']}
+                if len(tt_pct.get('Asrama', [])) and len(tt_pct.get('Pulang-pergi', [])):
+                    stat_parts.append(f"<b>tempat tinggal</b> (asrama {tt_pct['Asrama'][0]:.0f}% vs "
+                                       f"pulang-pergi {tt_pct['Pulang-pergi'][0]:.0f}%, p={res_tt['p']:.4f})")
+        if stat_parts:
+            ib(f"Faktor yang paling membedakan pada data yang sedang ditampilkan (lolos uji statistik): "
+               f"{' dan '.join(stat_parts)}. Mahasiswa yang terhubung ke lingkungan kampus, baik lewat komunitas "
+               f"maupun tinggal di dalam kampus, cenderung lebih banyak memanfaatkan fasilitasi. "
+               f"<span class='small-note'>p-value dihitung ulang otomatis dari data yang sedang difilter.</span>")
+        else:
+            ib("Pada kombinasi filter saat ini, tidak ada cukup variasi data untuk menguji faktor pembeda "
+               "secara statistik. Coba longgarkan filter untuk melihat pola yang lebih jelas.")
 
     # ─── Segmen yang paling tertinggal ───
     st.markdown("<div class='section-title'>3. Segmen yang Paling Tertinggal</div>", unsafe_allow_html=True)
@@ -708,6 +738,8 @@ with t0:
     # ─── Hambatan ───
     st.markdown("<div class='section-title'>4. Hambatan Utama: Prosedural, Bukan Kualitas</div>", unsafe_allow_html=True)
     hb1, hb2 = st.columns([1, 1])
+    kc = pd.Series(dtype=int)
+    sk = pd.DataFrame(columns=['Aspek', 'skor'])
     with hb1:
         if 'kendala' in df_f:
             kc = df_f['kendala'].dropna().str.split(',').explode().str.strip()
@@ -724,7 +756,9 @@ with t0:
         for lbl, key in [('Kualitas layanan', 'kualitas_layanan'), ('Kemudahan alur', 'kemudahan_alur'),
                           ('Kecepatan verifikasi', 'kecepatan_verif')]:
             if key in df_f:
-                skor_data.append({'Aspek': lbl, 'skor': df_f[key].dropna().astype(float).mean()})
+                vals = df_f[key].dropna().astype(float)
+                if len(vals) > 0:
+                    skor_data.append({'Aspek': lbl, 'skor': vals.mean()})
         if skor_data:
             sk = pd.DataFrame(skor_data).sort_values('skor')
             fig_sk = px.bar(sk, x='skor', y='Aspek', orientation='h', text=[f"{s:.2f}" for s in sk['skor']],
@@ -733,17 +767,26 @@ with t0:
             fig_sk.update_layout(xaxis_range=[0, 4], coloraxis_showscale=False)
             fig_sk.update_traces(hovertemplate='<b>%{y}</b><br>Skor rata-rata: %{x:.2f} dari 4<extra></extra>')
             st.plotly_chart(style_fig(fig_sk, title="Skor kepuasan (yang sudah pakai)", h=300), use_container_width=True)
-    ib("Tiga kendala teratas semuanya soal proses: waktu lama, pengajuan rumit, banyak dokumen. Sementara "
-       "yang sudah memakai justru menilai kualitasnya baik (di atas 3 dari 4). Titik terlemah adalah "
-       "<b>kecepatan verifikasi</b> (3,09), yang juga jadi keluhan proses paling sering. Perbaikan "
-       "sebaiknya menyasar penyederhanaan alur, bukan kualitas layanannya.")
+
+    if len(kc) > 0 or len(sk) > 0:
+        kendala_txt = ""
+        if len(kc) > 0:
+            top3_kendala = kc.sort_values(ascending=False).index[:3].tolist()
+            kendala_txt = f"Kendala paling sering disebut: {', '.join(top3_kendala)}. "
+        skor_txt = ""
+        if len(sk) > 0:
+            lowest = sk.iloc[0]
+            skor_txt = (f"Aspek dengan skor terendah: <b>{lowest['Aspek']}</b> ({lowest['skor']:.2f} dari 4). ")
+        ib(f"{kendala_txt}{skor_txt}"
+           f"<span class='small-note'>Dihitung ulang otomatis sesuai filter aktif — urutan kendala dan skor "
+           f"bisa berbeda tergantung subset data yang ditampilkan.</span>")
 
     # ─── Rekomendasi ───
     st.markdown("<div class='section-title'>5. Rekomendasi (Diurutkan Berdasarkan Kekuatan Bukti)</div>", unsafe_allow_html=True)
     st.markdown(f"""
 <div style='background:{hover_bg}; border:1px solid {ACCENT}33; border-left:4px solid {ACCENT}; border-radius:12px; padding:16px 20px; margin-top:6px;'>
 <p style='color:{text_main}; font-size:13.8px; line-height:1.9; margin:0;'>
-<b>1. Jadikan komunitas sebagai kanal utama menjangkau mahasiswa.</b> Bukti terkuat di seluruh data (p=0,0001).
+<b>1. Jadikan komunitas sebagai kanal utama menjangkau mahasiswa.</b> Temuan paling konsisten di data (lihat bagian 2 di atas).
 Gandeng komunitas yang ada untuk menyalurkan info dan dorongan, dan buat jalur khusus merangkul 55% mahasiswa
 yang belum tergabung komunitas manapun.<br>
 <b>2. Pangkas friksi administrasi, terutama kecepatan verifikasi.</b> Menyasar langsung mahasiswa yang sudah
