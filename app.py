@@ -620,14 +620,14 @@ t0, t1, t2, t3, t4, t5, t6, t7 = st.tabs(
 with t0:
     st.markdown(f"<div class='section-title'>Ringkasan untuk Pengambilan Keputusan</div>", unsafe_allow_html=True)
     st.markdown(f"<p style='color:{text_muted}; font-size:13px; margin-top:-4px;'>Semua angka berdasarkan "
-                f"{len(df)} responden (purposive sampling). Menggambarkan pola dalam sampel, bukan generalisasi "
+                f"{len(df_f)} responden (purposive sampling). Menggambarkan pola dalam sampel, bukan generalisasi "
                 f"ke seluruh mahasiswa IPB.</p>", unsafe_allow_html=True)
 
     # ─── Funnel: minat → tahu → pakai ───
-    n_total = len(df)
-    n_minat = (df['minat_lomba'] == 'Ya').sum() if 'minat_lomba' in df else 0
-    n_tahu = (df['pengetahuan_fasilitasi'] == 'Ya').sum() if 'pengetahuan_fasilitasi' in df else 0
-    n_pakai = (df['pernah_pakai'] == 'Ya').sum() if 'pernah_pakai' in df else 0
+    n_total = len(df_f)
+    n_minat = (df_f['minat_lomba'] == 'Ya').sum() if 'minat_lomba' in df_f else 0
+    n_tahu = (df_f['pengetahuan_fasilitasi'] == 'Ya').sum() if 'pengetahuan_fasilitasi' in df_f else 0
+    n_pakai = (df_f['pernah_pakai'] == 'Ya').sum() if 'pernah_pakai' in df_f else 0
 
     st.markdown("<div class='section-title'>1. Corong Minat → Aksi</div>", unsafe_allow_html=True)
     fc1, fc2 = st.columns([1.1, 1])
@@ -643,10 +643,11 @@ with t0:
     with fc2:
         drop = n_minat - n_pakai
         pct_pakai = n_pakai / n_total * 100
+        belum_pakai_txt = (f"Bahkan dari {n_tahu} yang sudah tahu fasilitasi, "
+                            f"{n_tahu - n_pakai} ({(n_tahu-n_pakai)/n_tahu*100:.0f}%) belum pernah memakainya. ") if n_tahu > 0 else ""
         ib(f"<b>{n_minat} dari {n_total}</b> mahasiswa ({n_minat/n_total*100:.0f}%) berminat kompetisi, "
            f"tapi hanya <b>{n_pakai}</b> ({pct_pakai:.0f}%) yang pernah memakai fasilitasi kampus. "
-           f"Bahkan dari {n_tahu} yang sudah tahu fasilitasi, "
-           f"{n_tahu - n_pakai} ({(n_tahu-n_pakai)/n_tahu*100:.0f}%) belum pernah memakainya. "
+           f"{belum_pakai_txt}"
            f"Jarak antara minat dan pemanfaatan inilah peluang terbesar untuk digarap.")
 
     # ─── Faktor yang terkait pemakaian fasilitas ───
@@ -655,15 +656,15 @@ with t0:
                 f"Hanya faktor yang lolos uji statistik yang ditampilkan.</p>", unsafe_allow_html=True)
 
     seg_data = []
-    if 'komunitas' in df and 'pernah_pakai' in df:
-        ikut = df['komunitas'].fillna('').apply(lambda x: 'Tidak satupun' not in x and x.strip() != '')
+    if 'komunitas' in df_f and 'pernah_pakai' in df_f:
+        ikut = df_f['komunitas'].fillna('').apply(lambda x: 'Tidak satupun' not in x and x.strip() != '')
         for grp, lbl in [(True, 'Ikut komunitas'), (False, 'Tidak ikut komunitas')]:
-            sub = df[ikut == grp]
+            sub = df_f[ikut == grp]
             if len(sub) > 0:
                 seg_data.append({'Kelompok': lbl, 'pct': (sub['pernah_pakai'] == 'Ya').mean() * 100, 'n': len(sub), 'grup': 'Komunitas'})
-    if 'tempat_tinggal' in df and 'pernah_pakai' in df:
+    if 'tempat_tinggal' in df_f and 'pernah_pakai' in df_f:
         for tt in ['Asrama', 'Kos/Kontrakan', 'Pulang Pergi (Rumah)']:
-            sub = df[df['tempat_tinggal'] == tt]
+            sub = df_f[df_f['tempat_tinggal'] == tt]
             if len(sub) > 0:
                 lbl = {'Pulang Pergi (Rumah)': 'Pulang-pergi'}.get(tt, tt)
                 seg_data.append({'Kelompok': lbl, 'pct': (sub['pernah_pakai'] == 'Ya').mean() * 100, 'n': len(sub), 'grup': 'Tempat tinggal'})
@@ -688,19 +689,19 @@ with t0:
     st.markdown("<div class='section-title'>3. Segmen yang Paling Tertinggal</div>", unsafe_allow_html=True)
     col_a, col_b, col_c = st.columns(3)
     with col_a:
-        if 'komunitas' in df:
-            ikut = df['komunitas'].fillna('').apply(lambda x: 'Tidak satupun' not in x and x.strip() != '')
+        if 'komunitas' in df_f:
+            ikut = df_f['komunitas'].fillna('').apply(lambda x: 'Tidak satupun' not in x and x.strip() != '')
             pct_no_com = (~ikut).mean() * 100
             kpi("Tidak ikut komunitas", f"{pct_no_com:.0f}%", f"{(~ikut).sum()} mahasiswa, hanya 27% yang pakai fasilitasi")
     with col_b:
-        if 'bidang_minat_utama' in df and 'pernah_pakai' in df:
-            belum = df['bidang_minat_utama'].fillna('').str.contains('Belum tahu', case=False)
+        if 'bidang_minat_utama' in df_f and 'pernah_pakai' in df_f:
+            belum = df_f['bidang_minat_utama'].fillna('').str.contains('Belum tahu', case=False)
             if belum.sum() > 0:
-                pct_belum_pakai = (df[belum]['pernah_pakai'] == 'Ya').mean() * 100
+                pct_belum_pakai = (df_f[belum]['pernah_pakai'] == 'Ya').mean() * 100
                 kpi("Belum tahu minat", f"{belum.sum()} org", f"cuma {pct_belum_pakai:.0f}% yang pakai fasilitasi")
     with col_c:
-        if 'tempat_tinggal' in df and 'pernah_pakai' in df:
-            pp = df[df['tempat_tinggal'] == 'Pulang Pergi (Rumah)']
+        if 'tempat_tinggal' in df_f and 'pernah_pakai' in df_f:
+            pp = df_f[df_f['tempat_tinggal'] == 'Pulang Pergi (Rumah)']
             if len(pp) > 0:
                 kpi("Mahasiswa pulang-pergi", f"{len(pp)} org", f"hanya {(pp['pernah_pakai']=='Ya').mean()*100:.0f}% yang pakai fasilitasi")
 
@@ -708,8 +709,8 @@ with t0:
     st.markdown("<div class='section-title'>4. Hambatan Utama: Prosedural, Bukan Kualitas</div>", unsafe_allow_html=True)
     hb1, hb2 = st.columns([1, 1])
     with hb1:
-        if 'kendala' in df:
-            kc = df['kendala'].dropna().str.split(',').explode().str.strip()
+        if 'kendala' in df_f:
+            kc = df_f['kendala'].dropna().str.split(',').explode().str.strip()
             kc = kc[kc.str.len() > 3]
             kc = map_short(kc, LABEL_KENDALA).value_counts().sort_values(ascending=True).tail(6)
             fig_hb = px.bar(kc, x=kc.values, y=kc.index, orientation='h', text=kc.values,
@@ -722,8 +723,8 @@ with t0:
         skor_data = []
         for lbl, key in [('Kualitas layanan', 'kualitas_layanan'), ('Kemudahan alur', 'kemudahan_alur'),
                           ('Kecepatan verifikasi', 'kecepatan_verif')]:
-            if key in df:
-                skor_data.append({'Aspek': lbl, 'skor': df[key].dropna().astype(float).mean()})
+            if key in df_f:
+                skor_data.append({'Aspek': lbl, 'skor': df_f[key].dropna().astype(float).mean()})
         if skor_data:
             sk = pd.DataFrame(skor_data).sort_values('skor')
             fig_sk = px.bar(sk, x='skor', y='Aspek', orientation='h', text=[f"{s:.2f}" for s in sk['skor']],
