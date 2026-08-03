@@ -48,6 +48,12 @@ ACCENT3 = "#EDA100"      # amber — netral/perhatian
 # ═══════════════════════════════════════════════════════
 st.markdown(f"""
 <style>
+:root, .stApp {{
+    --text-color: {text_main} !important;
+    --secondary-text-color: {text_muted} !important;
+    --background-color: {bg_app} !important;
+    --secondary-background-color: {bg_panel} !important;
+}}
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 .stApp, p, h1, h2, h3, h4, h5, h6, label, li, .stMarkdown div {{
     font-family: 'Inter', -apple-system, sans-serif !important;
@@ -79,17 +85,17 @@ span[data-baseweb="tag"] span {{ color: {ACCENT} !important; }}
 }}
 
 /* ── Tabs ── */
-.stTabs [data-baseweb="tab-list"] {{ background-color: {bg_panel} !important; border-radius: 14px; padding: 6px; gap: 4px; border: 1px solid {border_col} !important; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }}
+.stTabs [data-baseweb="tab-list"] {{ background-color: {bg_panel} !important; border-radius: 14px; padding: 6px; gap: 4px; border: 1px solid {border_col} !important; box-shadow: 0 1px 3px rgba(0,0,0,0.05); --text-color: {text_muted} !important; }}
 .stTabs button[role="tab"] {{ background: transparent !important; border-radius: 10px; padding: 10px 16px; font-weight: 600; font-size: 13px !important; transition: all .15s ease; }}
 .stTabs button[role="tab"], .stTabs [data-baseweb="tab"],
 .stTabs button[role="tab"] *, .stTabs [data-baseweb="tab"] * {{
-    color: {text_muted} !important; -webkit-text-fill-color: {text_muted} !important;
+    color: {text_muted} !important; -webkit-text-fill-color: {text_muted} !important; fill: {text_muted} !important; opacity: 1 !important;
 }}
 .stTabs button[aria-selected="true"], .stTabs [aria-selected="true"][data-baseweb="tab"] {{
-    background: linear-gradient(135deg, {ACCENT}, #14876B) !important; box-shadow: 0 3px 8px rgba(15,110,86,0.3);
+    background: linear-gradient(135deg, {ACCENT}, #14876B) !important; box-shadow: 0 3px 8px rgba(15,110,86,0.3); --text-color: white !important;
 }}
 .stTabs button[aria-selected="true"] *, .stTabs [aria-selected="true"][data-baseweb="tab"] * {{
-    color: white !important; -webkit-text-fill-color: white !important; font-weight: 700 !important;
+    color: white !important; -webkit-text-fill-color: white !important; fill: white !important; font-weight: 700 !important; opacity: 1 !important;
 }}
 
 /* ── KPI cards ── */
@@ -689,28 +695,39 @@ with t0:
 
         # Hitung ulang uji statistik LIVE dari data yang sedang difilter — bukan angka hardcoded,
         # supaya p-value selalu sinkron dengan persentase yang ditampilkan di atas.
+        # PENTING: 'valid' cuma berarti ujinya berhasil dijalankan (bukan degenerate), BUKAN berarti
+        # hasilnya signifikan. Signifikan = valid DAN p<0,05. Dua hal ini harus dicek terpisah.
         stat_parts = []
+        not_sig_parts = []
         if 'komunitas' in df_f and 'pernah_pakai' in df_f:
             ct_kom = pd.crosstab(ikut, df_f['pernah_pakai'])
             res_kom = run_assoc_test(ct_kom)
-            if res_kom['valid']:
-                kom_pct = {lbl: seg_df[seg_df['Kelompok'] == lbl]['pct'].values for lbl in ['Ikut komunitas', 'Tidak ikut komunitas']}
-                if len(kom_pct['Ikut komunitas']) and len(kom_pct['Tidak ikut komunitas']):
-                    stat_parts.append(f"<b>keterlibatan komunitas</b> (ikut komunitas {kom_pct['Ikut komunitas'][0]:.0f}% vs "
-                                       f"tidak ikut {kom_pct['Tidak ikut komunitas'][0]:.0f}%, p={res_kom['p']:.4f})")
+            kom_pct = {lbl: seg_df[seg_df['Kelompok'] == lbl]['pct'].values for lbl in ['Ikut komunitas', 'Tidak ikut komunitas']}
+            if res_kom['valid'] and len(kom_pct['Ikut komunitas']) and len(kom_pct['Tidak ikut komunitas']):
+                txt = (f"<b>keterlibatan komunitas</b> (ikut komunitas {kom_pct['Ikut komunitas'][0]:.0f}% vs "
+                       f"tidak ikut {kom_pct['Tidak ikut komunitas'][0]:.0f}%, p={res_kom['p']:.4f})")
+                (stat_parts if res_kom['p'] < 0.05 else not_sig_parts).append(txt)
         if 'tempat_tinggal' in df_f and 'pernah_pakai' in df_f:
             ct_tt = pd.crosstab(df_f['tempat_tinggal'], df_f['pernah_pakai'])
             res_tt = run_assoc_test(ct_tt)
-            if res_tt['valid']:
-                tt_pct = {lbl: seg_df[seg_df['Kelompok'] == lbl]['pct'].values for lbl in ['Asrama', 'Pulang-pergi']}
-                if len(tt_pct.get('Asrama', [])) and len(tt_pct.get('Pulang-pergi', [])):
-                    stat_parts.append(f"<b>tempat tinggal</b> (asrama {tt_pct['Asrama'][0]:.0f}% vs "
-                                       f"pulang-pergi {tt_pct['Pulang-pergi'][0]:.0f}%, p={res_tt['p']:.4f})")
+            tt_pct = {lbl: seg_df[seg_df['Kelompok'] == lbl]['pct'].values for lbl in ['Asrama', 'Pulang-pergi']}
+            if res_tt['valid'] and len(tt_pct.get('Asrama', [])) and len(tt_pct.get('Pulang-pergi', [])):
+                txt = (f"<b>tempat tinggal</b> (asrama {tt_pct['Asrama'][0]:.0f}% vs "
+                       f"pulang-pergi {tt_pct['Pulang-pergi'][0]:.0f}%, p={res_tt['p']:.4f})")
+                (stat_parts if res_tt['p'] < 0.05 else not_sig_parts).append(txt)
+
+        cara_baca = ("<span class='small-note'>Cara baca: p-value menunjukkan apakah perbedaan persen di atas "
+                      "kemungkinan besar nyata (p&lt;0,05) atau bisa jadi cuma kebetulan sebaran sampel (p&gt;0,05). "
+                      "Dihitung ulang otomatis dari data yang sedang difilter.</span>")
         if stat_parts:
-            ib(f"Faktor yang paling membedakan pada data yang sedang ditampilkan (lolos uji statistik): "
+            ib(f"Faktor yang terbukti signifikan membedakan pada data yang sedang ditampilkan: "
                f"{' dan '.join(stat_parts)}. Mahasiswa yang terhubung ke lingkungan kampus, baik lewat komunitas "
-               f"maupun tinggal di dalam kampus, cenderung lebih banyak memanfaatkan fasilitasi. "
-               f"<span class='small-note'>p-value dihitung ulang otomatis dari data yang sedang difilter.</span>")
+               f"maupun tinggal di dalam kampus, cenderung lebih banyak memanfaatkan fasilitasi. {cara_baca}")
+        elif not_sig_parts:
+            ib(f"Pada data yang sedang ditampilkan, perbedaan persentase yang terlihat di chart di atas "
+               f"<b>belum terbukti signifikan secara statistik</b> ({' ; '.join(not_sig_parts)}) — kemungkinan besar "
+               f"karena filter yang aktif memperkecil jumlah data. Jangan jadikan pola ini sebagai kesimpulan dulu; "
+               f"coba longgarkan filter untuk melihat gambaran yang lebih stabil. {cara_baca}")
         else:
             ib("Pada kombinasi filter saat ini, tidak ada cukup variasi data untuk menguji faktor pembeda "
                "secara statistik. Coba longgarkan filter untuk melihat pola yang lebih jelas.")
@@ -783,6 +800,11 @@ with t0:
 
     # ─── Rekomendasi ───
     st.markdown("<div class='section-title'>5. Rekomendasi (Diurutkan Berdasarkan Kekuatan Bukti)</div>", unsafe_allow_html=True)
+    st.markdown(f"<p style='color:{text_muted}; font-size:12px; font-style:italic; margin-top:-4px;'>"
+                f"Rekomendasi di bawah berbasis analisis seluruh data (188 responden), tidak berubah mengikuti "
+                f"filter di sidebar — supaya strategi yang disarankan tidak berubah-ubah tergantung subset yang "
+                f"sedang dilihat. Bandingkan dengan bagian 2 di atas untuk melihat apakah pola serupa masih "
+                f"terlihat pada subset yang sedang Anda filter.</p>", unsafe_allow_html=True)
     st.markdown(f"""
 <div style='background:{hover_bg}; border:1px solid {ACCENT}33; border-left:4px solid {ACCENT}; border-radius:12px; padding:16px 20px; margin-top:6px;'>
 <p style='color:{text_main}; font-size:13.8px; line-height:1.9; margin:0;'>
@@ -1111,7 +1133,10 @@ with t4:
                 if res['warning']:
                     st.markdown(f"<span class='small-note'>⚠ {res['warning']}</span>", unsafe_allow_html=True)
                 if res['valid']:
-                    ib(explain_stat(res['p'], res['v'], "Kesimpulan: jalur masuk mahasiswa <b>tidak berkaitan</b> dengan cepat-tidaknya beradaptasi.", res['test_name']))
+                    concl = ("jalur masuk mahasiswa <b>tidak terbukti berkaitan</b> dengan cepat-tidaknya beradaptasi"
+                             if res['p'] >= 0.05 else
+                             "jalur masuk mahasiswa <b>terbukti berkaitan signifikan</b> dengan cepat-tidaknya beradaptasi")
+                    ib(explain_stat(res['p'], res['v'], f"Kesimpulan pada data ini: {concl}.", res['test_name']))
 
     with cb:
         if all(k in df_f for k in ['bidang_minat_utama', 'kerja_sendiri']):
@@ -1136,7 +1161,10 @@ with t4:
                 if res2['warning']:
                     st.markdown(f"<span class='small-note'>⚠ {res2['warning']}</span>", unsafe_allow_html=True)
                 if res2['valid']:
-                    ib(explain_stat(res2['p'], res2['v'], "Kesimpulan: bidang minat <b>tidak berkaitan kuat</b> dengan preferensi kerja sendiri/tim.", res2['test_name']))
+                    concl2 = ("bidang minat <b>tidak terbukti berkaitan kuat</b> dengan preferensi kerja sendiri/tim"
+                              if res2['p'] >= 0.05 else
+                              "bidang minat <b>terbukti berkaitan signifikan</b> dengan preferensi kerja sendiri/tim")
+                    ib(explain_stat(res2['p'], res2['v'], f"Kesimpulan pada data ini: {concl2}.", res2['test_name']))
 
     sh("Fasilitas & Skill Paling Diprioritaskan per Bidang")
     fas_rows = []
